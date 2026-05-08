@@ -16,3 +16,5 @@ aiosmtplib==3.0.2
 python-dotenv==1.0.1
 tenacity==9.0.0
 APScheduler==3.10.4
+gspread==6.1.4
+google-auth==2.36.0

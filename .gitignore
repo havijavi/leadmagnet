@@ -4,6 +4,8 @@
 .env.production
 *.pem
 *.key
+secrets/*
+!secrets/.gitkeep
 
 # python
 __pycache__/

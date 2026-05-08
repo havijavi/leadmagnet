@@ -26,6 +26,7 @@ const groups: { label: string; items: { href: string; label: string }[] }[] = [
     label: "Automation",
     items: [
       { href: "/schedules", label: "Schedules" },
+      { href: "/sheets", label: "Google Sheets" },
       { href: "/crm", label: "CRM webhooks" },
     ],
   },
@@ -37,7 +38,7 @@ export default function Sidebar() {
     <aside className="w-60 shrink-0 border-r border-border bg-panel min-h-screen p-4">
       <div className="mb-6 px-2">
         <div className="font-bold text-lg">⚡ LeadMagnet</div>
-        <div className="text-xs text-muted">v0.2.0</div>
+        <div className="text-xs text-muted">v0.3.0</div>
       </div>
       <nav className="flex flex-col gap-4">
         {groups.map((group) => (
@@ -71,14 +72,6 @@ export default function Sidebar() {
 
         <div className="px-3 mt-4">
           <div className="text-[10px] uppercase tracking-wider text-muted mb-1">External</div>
-          <a
-            href="http://localhost:8080"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="block px-3 py-2 rounded-lg text-sm text-muted hover:text-text"
-          >
-            NocoDB ↗
-          </a>
           <a
             href="http://localhost:8000/docs"
             target="_blank"

@@ -151,6 +151,24 @@ class ScheduledJob(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class SheetsConfig(Base):
+    __tablename__ = "sheets_configs"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    spreadsheet_id: Mapped[str] = mapped_column(Text, nullable=False)
+    spreadsheet_url: Mapped[Optional[str]] = mapped_column(Text)
+    worksheet_name: Mapped[str] = mapped_column(Text, default="Leads")
+    sync_kind: Mapped[str] = mapped_column(Text, default="leads")
+    filters: Mapped[dict] = mapped_column(JSONB, default=dict)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    last_synced_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    last_status: Mapped[Optional[str]] = mapped_column(Text)
+    last_error: Mapped[Optional[str]] = mapped_column(Text)
+    last_row_count: Mapped[Optional[int]] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class CrmWebhook(Base):
     __tablename__ = "crm_webhooks"
 

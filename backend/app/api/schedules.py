@@ -13,7 +13,7 @@ from app.services.scheduler import reload_jobs
 router = APIRouter(dependencies=[Depends(require_admin)])
 
 
-VALID_KINDS = {"discovery", "enrichment_pending", "crm_sync"}
+VALID_KINDS = {"discovery", "enrichment_pending", "sheets_sync", "crm_sync"}
 
 
 @router.get("/kinds")

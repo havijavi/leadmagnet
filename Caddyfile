@@ -22,9 +22,3 @@
 		reverse_proxy frontend:3000
 	}
 }
-
-# NocoDB on its own subdomain. Skip the block if NOCODB_DOMAIN is unset.
-{$NOCODB_DOMAIN} {
-	encode gzip zstd
-	reverse_proxy nocodb:8080
-}

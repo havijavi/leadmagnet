@@ -86,9 +86,15 @@ async def _run_job(job_id: UUID, kind: str, payload: dict[str, Any]) -> None:
         elif kind == "enrichment_pending":
             from app.workers.enrichment_worker import enrich_pending
             await enrich_pending(limit=int(payload.get("limit", 25)))
+        elif kind == "sheets_sync":
+            from app.services.google_sheets import sync_all_active, sync_config
+            cfg_id = payload.get("config_id")
+            if cfg_id:
+                from uuid import UUID as _UUID
+                await sync_config(_UUID(cfg_id))
+            else:
+                await sync_all_active()
         elif kind == "crm_sync":
-            # Re-fire 'lead.created' for any lead that's been created but never CRM-synced.
-            # Implemented as a no-op stub for now — users can add custom logic here.
             logger.info("crm_sync job %s noop", job_id)
         else:
             err = f"unknown kind: {kind}"

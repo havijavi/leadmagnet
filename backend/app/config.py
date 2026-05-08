@@ -34,6 +34,15 @@ class Settings(BaseSettings):
 
     SEARXNG_URL: str = ""
 
+    HUNTER_API_KEY: str = ""
+    SNOV_CLIENT_ID: str = ""
+    SNOV_CLIENT_SECRET: str = ""
+
+    GOOGLE_SHEETS_CREDENTIALS_JSON: str = ""
+    GOOGLE_SHEETS_CREDENTIALS_FILE: str = ""
+
+    SCHEDULER_ENABLED: bool = True
+
     NOTIFY_FIT_THRESHOLD: int = 70
 
 

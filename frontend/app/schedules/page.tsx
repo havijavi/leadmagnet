@@ -20,6 +20,7 @@ type Job = {
 const KIND_DESCRIPTIONS: Record<string, string> = {
   discovery: "Run all active sources (or a subset via payload.source_ids).",
   enrichment_pending: "Waterfall-enrich any leads with status=pending. payload.limit caps the batch.",
+  sheets_sync: "Push leads / outreach / enrichment-runs into Google Sheets. Optional payload.config_id targets a single sync config; otherwise runs all active.",
   crm_sync: "Re-fire lead.created for any leads that haven't been pushed to CRM yet.",
 };
 

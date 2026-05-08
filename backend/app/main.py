@@ -14,6 +14,7 @@ from app.api import (
     research,
     schedules,
     services,
+    sheets,
     sources,
     stats,
 )
@@ -58,3 +59,4 @@ app.include_router(imports.router, prefix="/api/import", tags=["import"])
 app.include_router(research.router, prefix="/api/research", tags=["research"])
 app.include_router(schedules.router, prefix="/api/schedules", tags=["schedules"])
 app.include_router(crm.router, prefix="/api/crm", tags=["crm"])
+app.include_router(sheets.router, prefix="/api/sheets", tags=["sheets"])

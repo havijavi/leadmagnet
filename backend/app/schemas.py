@@ -261,6 +261,40 @@ class CrmWebhookOut(_Base):
     created_at: datetime
 
 
+# ---------- Google Sheets sync ----------
+
+class SheetsConfigIn(BaseModel):
+    name: str
+    spreadsheet_id: str
+    spreadsheet_url: Optional[str] = None
+    worksheet_name: str = "Leads"
+    sync_kind: str = "leads"  # leads | outreach | enrichment_runs
+    filters: dict[str, Any] = Field(default_factory=dict)
+    is_active: bool = True
+
+
+class SheetsConfigOut(_Base):
+    id: UUID
+    name: str
+    spreadsheet_id: str
+    spreadsheet_url: Optional[str]
+    worksheet_name: str
+    sync_kind: str
+    filters: dict[str, Any]
+    is_active: bool
+    last_synced_at: Optional[datetime]
+    last_status: Optional[str]
+    last_error: Optional[str]
+    last_row_count: Optional[int]
+    created_at: datetime
+
+
+class SheetsStatusOut(BaseModel):
+    configured: bool
+    service_account_email: Optional[str]
+    setup_hint: str
+
+
 # ---------- Stats ----------
 
 class StatsOut(BaseModel):

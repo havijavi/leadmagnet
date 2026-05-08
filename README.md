@@ -14,7 +14,7 @@ LeadMagnet stitches together best-in-class open-source tools so you can replace 
 | Job orchestration          | FastAPI workers + APScheduler (in-process)    |
 | AI extraction              | DeepSeek / Qwen / OpenAI / Ollama (any OpenAI-compat API) |
 | Storage / datasets         | PostgreSQL                                    |
-| Console UI                 | Next.js dashboard + NocoDB spreadsheet view   |
+| Console UI                 | Next.js dashboard + Google Sheets sync        |
 
 ### Clay
 
@@ -24,7 +24,7 @@ LeadMagnet stitches together best-in-class open-source tools so you can replace 
 | Web scraping for prospect data    | Crawl4AI (already in stack)            |
 | AI research on prospects   | DeepSeek/Qwen prompt → structured dossier (employee est, tech stack, signals, hooks) |
 | Workflow automation / cron | APScheduler — discovery / enrichment on cron  |
-| Spreadsheet-style UI       | NocoDB on the same Postgres                   |
+| Spreadsheet-style UI       | Google Sheets sync (one-way, idempotent)      |
 | CRM push                   | Generic webhooks (HubSpot, Pipedrive, Slack, anything) with HMAC signing |
 | LinkedIn data extraction   | Crawl4AI fallback fetches public OG/meta tags |
 | CSV target list import     | Built-in `/api/import/csv` upload             |
@@ -54,17 +54,15 @@ docker compose up -d --build
 | ------------- | ------------------------------------ | ---------------------------------- |
 | Dashboard     | http://localhost:3000                | Day-to-day pipeline UI             |
 | API docs      | http://localhost:8000/docs           | Swagger + try-it-out               |
-| NocoDB        | http://localhost:8080                | Spreadsheet view of every table    |
 
-The dashboard prompts for `ADMIN_TOKEN` on first load — paste it from your `.env`. NocoDB needs first-time setup: pick "External database" → Postgres, host `postgres`, port `5432`, db/user/password from `.env`.
+The dashboard prompts for `ADMIN_TOKEN` on first load — paste it from your `.env`. Google Sheets sync (the spreadsheet view) is configured under `/sheets` once you've added a service account — see below.
 
 ## Deploy to a Contabo VPS
 
-DNS: point `leadmagnet.yourdomain.com` (and optionally `data.yourdomain.com` for NocoDB) at the VPS IP. Then on a fresh Ubuntu/Debian box:
+DNS: point `leadmagnet.yourdomain.com` at the VPS IP. Then on a fresh Ubuntu/Debian box:
 
 ```bash
 sudo DOMAIN=leadmagnet.yourdomain.com \
-     NOCODB_DOMAIN=data.yourdomain.com \
      ACME_EMAIL=you@yourdomain.com \
      bash <(curl -fsSL https://raw.githubusercontent.com/havijavi/leadmagnet/main/deploy/setup-vps.sh)
 ```
@@ -104,36 +102,60 @@ The waterfall runs whichever providers you've configured, in this order:
 
 Add a provider by dropping a module in `backend/app/services/enrichment/` and appending it to `PROVIDERS`.
 
+## Google Sheets sync (replaces NocoDB / Notion)
+
+LeadMagnet writes leads, outreach messages, and enrichment audit data to your own Google Sheets — one-way, idempotent (every sync rewrites the tab from current DB state). Use it as your spreadsheet UI, share it with your team, or pipe it into Apps Script for downstream automation.
+
+### Setup (one-time)
+
+1. **Google Cloud Console** → create or pick a project.
+2. **APIs & Services → Library** → enable **Google Sheets API**.
+3. **APIs & Services → Credentials → Create credentials → Service account**. Skip the optional steps; you don't need to grant it any roles in the project.
+4. Click the new service account → **Keys → Add key → JSON**. Download the file.
+5. Configure LeadMagnet, two options:
+   - **Inline (recommended for production)**: paste the entire JSON into `GOOGLE_SHEETS_CREDENTIALS_JSON` in `.env` (use single-quotes around the value to preserve newlines).
+   - **File mount (recommended for local dev)**: drop the JSON at `./secrets/google.json` and set `GOOGLE_SHEETS_CREDENTIALS_FILE=/app/secrets/google.json`. The `./secrets` folder is bind-mounted read-only into the backend container.
+6. Open each target Google Sheet → **Share** → paste the service account's `client_email` (shown on the dashboard `/sheets` page) and grant **Editor**.
+7. In the dashboard go to `/sheets`, click **+ New config**, and paste either the spreadsheet ID or the full URL — LeadMagnet extracts the ID for you.
+
+### Sync kinds
+
+| Kind              | What gets written                                                |
+| ----------------- | ---------------------------------------------------------------- |
+| `leads`           | Every lead with status, fit score, enrichment fields, research summary, tags. Filter by `min_fit_score`, `status`, `enrichment_status`. |
+| `outreach`        | Every outreach message with subject, body, status, timestamps.   |
+| `enrichment_runs` | Audit log of every waterfall run (providers tried, fields filled, errors). |
+
+### Triggering syncs
+
+- Manual: `/sheets` page → **Sync now** on a config, or **Sync all now**.
+- Scheduled: `/schedules` → new job of kind `sheets_sync`. Optional `payload.config_id` targets a single config; otherwise all active configs run.
+- API: `POST /api/sheets/{id}/sync` or `POST /api/sheets/sync-all`.
+
 ## Architecture
 
 ```
-                           ┌───────────────────────┐
-                           │ Caddy (auto-HTTPS)    │
-                           └──────────┬────────────┘
-                                      │
-        ┌───────────────────┬─────────┼──────────────┬───────────────────────┐
-        ▼                   ▼         ▼              ▼                       ▼
-┌──────────────┐    ┌──────────────┐  ┌──────────────────┐         ┌──────────────────┐
-│ Next.js UI   │    │ NocoDB       │  │ FastAPI backend  │ ──────► │ DeepSeek / Qwen  │
-│ (3000)       │    │ (8080)       │  │   + APScheduler  │         │  (your LLM)      │
-└──────────────┘    └──────┬───────┘  │   + workers      │         └──────────────────┘
-                           │          └──────┬───────────┘
-                           │                 │
-                           ▼                 ▼
-                       ┌────────────────────────────┐
-                       │       PostgreSQL           │  ← single source of truth
-                       │  (leads, runs, schedules,  │
-                       │   crm_webhooks, …)         │
-                       └────────────────────────────┘
-                                  ▲
-                                  │
-                       ┌──────────┴──────────────┐
-                       │ Crawl4AI / Playwright   │  ← stealth headless browser
-                       │ + httpx fallback        │
-                       └─────────────────────────┘
+                          ┌───────────────────────┐
+                          │ Caddy (auto-HTTPS)    │
+                          └──────────┬────────────┘
+                                     │
+                ┌────────────────────┴─────────────────────┐
+                ▼                                          ▼
+       ┌──────────────────┐                       ┌──────────────────────┐
+       │ Next.js UI       │ ────────────────────► │ FastAPI backend      │
+       │ (3000)           │                       │  + APScheduler       │
+       └──────────────────┘                       │  + waterfall workers │
+                                                  └────────┬─────────────┘
+                                                           │
+       ┌────────────────────┬────────────────────┬─────────┼───────────────┬───────────────────────┐
+       ▼                    ▼                    ▼         ▼               ▼                       ▼
+┌──────────────┐   ┌──────────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐  ┌──────────────────┐
+│ Crawl4AI /   │   │ Hunter / Snov    │  │ DeepSeek /   │  │ PostgreSQL   │  │ Google Sheets    │  │ SMTP · Telegram  │
+│ Playwright   │   │ (waterfall)      │  │ Qwen (LLM)   │  │ (truth)      │  │ (sync read-only) │  │ webhooks · CRM   │
+└──────────────┘   └──────────────────┘  └──────────────┘  └──────────────┘  └──────────────────┘  └──────────────────┘
 
-Inputs:  HN · Reddit · ProductHunt · IndieHackers · custom URLs · Google (via SearXNG) · CSV upload
-Outputs: SMTP · Telegram · webhooks (Slack, Discord) · CRM webhooks (HubSpot, Pipedrive, generic)
+Inputs:  HN · Reddit · ProductHunt · IndieHackers · custom URLs · Google (SearXNG) · CSV upload
+Outputs: SMTP · Telegram · generic webhooks · CRM webhooks (HubSpot, Pipedrive) · Google Sheets
 ```
 
 ## Pages in the dashboard
@@ -146,7 +168,8 @@ Outputs: SMTP · Telegram · webhooks (Slack, Discord) · CRM webhooks (HubSpot,
 - `/leads` — sorted by fit score, drawer for enrichment + research + outreach
 - `/enrichment` — bulk enrichment, ad-hoc waterfall test, run history
 - `/campaigns` — outreach drafts and sends
-- `/schedules` — APScheduler cron jobs (replaces n8n)
+- `/schedules` — APScheduler cron jobs (discovery, enrichment, sheets sync, CRM)
+- `/sheets` — Google Sheets sync configurations
 - `/crm` — CRM webhook configuration, test fire
 
 ## API surface (auth: `Authorization: Bearer <ADMIN_TOKEN>`)
@@ -169,6 +192,10 @@ Outputs: SMTP · Telegram · webhooks (Slack, Discord) · CRM webhooks (HubSpot,
 | `/api/campaigns/draft`            | POST   | LLM-draft outreach               |
 | `/api/campaigns/{id}/send`        | POST   | Send via SMTP                    |
 | `/api/schedules`                  | CRUD   | APScheduler cron jobs            |
+| `/api/sheets`                     | CRUD   | Google Sheets sync configs       |
+| `/api/sheets/{id}/sync`           | POST   | Sync a config now                |
+| `/api/sheets/sync-all`            | POST   | Sync every active config         |
+| `/api/sheets/status`              | GET    | Service-account email + readiness|
 | `/api/crm`                        | CRUD   | CRM webhook configs              |
 | `/api/crm/{id}/test`              | POST   | Fire a test event                |
 | `/health`, `/api/stats`           | GET    | Operational visibility           |
@@ -210,7 +237,8 @@ leadmagnet/
 │       │   ├── notifier.py
 │       │   ├── crm_push.py
 │       │   ├── scheduler.py
-│       │   └── enrichment/     # waterfall provider chain
+│       │   ├── google_sheets.py    # service-account-based sheet writes
+│       │   └── enrichment/         # waterfall provider chain
 │       │       ├── waterfall.py
 │       │       ├── website.py
 │       │       ├── hunter.py
@@ -229,6 +257,7 @@ leadmagnet/
         ├── enrichment/
         ├── campaigns/
         ├── schedules/
+        ├── sheets/
         └── crm/
 ```
 

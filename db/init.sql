@@ -182,6 +182,27 @@ CREATE TABLE IF NOT EXISTS crm_webhooks (
 );
 
 -- ----------------------------------------------------------------------------
+-- Google Sheets sync configurations.
+-- One row per spreadsheet/worksheet target. Triggered manually or by a
+-- scheduled_jobs row of kind='sheets_sync'.
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS sheets_configs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name TEXT NOT NULL,
+    spreadsheet_id TEXT NOT NULL,
+    spreadsheet_url TEXT,
+    worksheet_name TEXT NOT NULL DEFAULT 'Leads',
+    sync_kind TEXT NOT NULL DEFAULT 'leads',  -- 'leads' | 'outreach' | 'enrichment_runs'
+    filters JSONB DEFAULT '{}'::jsonb,        -- e.g. {"min_fit_score": 60, "status": "new"}
+    is_active BOOLEAN DEFAULT TRUE,
+    last_synced_at TIMESTAMPTZ,
+    last_status TEXT,
+    last_error TEXT,
+    last_row_count INTEGER,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ----------------------------------------------------------------------------
 -- Updated-at trigger.
 -- ----------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION touch_updated_at()

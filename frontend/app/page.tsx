@@ -26,6 +26,8 @@ type Health = {
   webhook_configured: boolean;
   enrichment_providers: Provider[];
   scheduler_enabled: boolean;
+  google_sheets_configured: boolean;
+  google_sheets_service_account?: string;
 };
 
 export default function Dashboard() {
@@ -63,6 +65,7 @@ export default function Dashboard() {
           <Pill label="Scheduler" value={health?.scheduler_enabled ? "running" : "off"} tone={health?.scheduler_enabled ? "good" : "muted"} />
           <Pill label="SMTP" value={health?.smtp_configured ? "ready" : "off"} tone={health?.smtp_configured ? "good" : "muted"} />
           <Pill label="Telegram" value={health?.telegram_configured ? "ready" : "off"} tone={health?.telegram_configured ? "good" : "muted"} />
+          <Pill label="Google Sheets" value={health?.google_sheets_configured ? "ready" : "off"} tone={health?.google_sheets_configured ? "good" : "muted"} />
         </div>
       </section>
 
@@ -90,7 +93,7 @@ export default function Dashboard() {
           <li><Link className="text-accent2" href="/sources">Pick lead sources</Link> or <Link className="text-accent2" href="/import">import a CSV target list</Link>.</li>
           <li><Link className="text-accent2" href="/discovery">Run discovery</Link> to harvest fresh leads, or <Link className="text-accent2" href="/enrichment">enrich existing leads</Link>.</li>
           <li><Link className="text-accent2" href="/leads">Review leads</Link> — open one for AI research and outreach drafting.</li>
-          <li><Link className="text-accent2" href="/schedules">Schedule</Link> the pipeline so it runs hands-off, push events to <Link className="text-accent2" href="/crm">CRM webhooks</Link>.</li>
+          <li><Link className="text-accent2" href="/schedules">Schedule</Link> the pipeline so it runs hands-off, push events to <Link className="text-accent2" href="/crm">CRM webhooks</Link>, and mirror everything into <Link className="text-accent2" href="/sheets">Google Sheets</Link>.</li>
         </ol>
       </section>
     </div>
