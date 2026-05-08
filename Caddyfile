@@ -5,7 +5,6 @@
 {$DOMAIN} {
 	encode gzip zstd
 
-	# API + auto-generated OpenAPI docs
 	handle_path /api/* {
 		reverse_proxy backend:8000
 	}
@@ -19,8 +18,13 @@
 		reverse_proxy backend:8000
 	}
 
-	# Everything else → Next.js
 	handle {
 		reverse_proxy frontend:3000
 	}
+}
+
+# NocoDB on its own subdomain. Skip the block if NOCODB_DOMAIN is unset.
+{$NOCODB_DOMAIN} {
+	encode gzip zstd
+	reverse_proxy nocodb:8080
 }

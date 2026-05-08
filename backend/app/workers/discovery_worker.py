@@ -11,6 +11,7 @@ from sqlalchemy import select
 from app.config import settings
 from app.db import session_scope
 from app.models import DiscoveryRun, Lead, LeadSource, ServiceOffering
+from app.services.crm_push import fire_event
 from app.services.extractor import extract_leads, fingerprint_lead, qualify_lead
 from app.services.notifier import notify_new_lead
 from app.sources import REGISTRY
@@ -94,6 +95,7 @@ async def _process_page(url: str, content: str, services: list[ServiceOffering],
         return 0
 
     added = 0
+    new_lead_ids: list[UUID] = []
     async with session_scope() as session:
         for raw in raw_leads:
             raw["source_url"] = url
@@ -113,6 +115,7 @@ async def _process_page(url: str, content: str, services: list[ServiceOffering],
                 company=raw.get("company"),
                 email=raw.get("email"),
                 website=raw.get("website"),
+                domain=_domain_of(raw.get("website") or raw.get("email")),
                 location=raw.get("location"),
                 role=raw.get("role"),
                 project_summary=raw.get("project_summary"),
@@ -125,13 +128,11 @@ async def _process_page(url: str, content: str, services: list[ServiceOffering],
                 raw_data=raw,
             )
             session.add(lead)
+            await session.flush()
+            new_lead_ids.append(lead.id)
             added += 1
 
             if lead.fit_score >= settings.NOTIFY_FIT_THRESHOLD:
-                # Notify outside the DB transaction would be cleaner, but we
-                # guarantee the lead is persisted by the time the user clicks
-                # through from the notification. Side-effect failures are
-                # caught inside notify_new_lead.
                 try:
                     await notify_new_lead({
                         "name": lead.name,
@@ -146,7 +147,23 @@ async def _process_page(url: str, content: str, services: list[ServiceOffering],
                 except Exception as e:
                     logger.warning("Notifier failed: %s", e)
 
+    # Fire CRM webhooks AFTER the transaction has committed.
+    for lid in new_lead_ids:
+        try:
+            await fire_event("lead.created", lid)
+        except Exception as e:
+            logger.warning("CRM push for lead.created failed: %s", e)
+
     return added
+
+
+def _domain_of(s: Optional[str]) -> Optional[str]:
+    if not s:
+        return None
+    if "@" in s:
+        return s.split("@", 1)[1].lower()
+    out = s.lower().replace("https://", "").replace("http://", "").split("/")[0]
+    return out[4:] if out.startswith("www.") else out or None
 
 
 def _match_service(raw: dict, services: list[ServiceOffering]) -> Optional[ServiceOffering]:

@@ -4,7 +4,9 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
--- Services the user offers (e.g. "Next.js development", "AI integrations").
+-- ----------------------------------------------------------------------------
+-- Service offerings: what the user sells.
+-- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS service_offerings (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name TEXT NOT NULL,
@@ -16,23 +18,27 @@ CREATE TABLE IF NOT EXISTS service_offerings (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Lead sources (Hacker News, Reddit, Google search, custom URLs).
+-- ----------------------------------------------------------------------------
+-- Lead sources: where to discover leads (HN, Reddit, custom URLs, search).
+-- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS lead_sources (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    kind TEXT NOT NULL,        -- 'hackernews' | 'reddit' | 'google' | 'url'
+    kind TEXT NOT NULL,
     name TEXT NOT NULL,
     config JSONB DEFAULT '{}'::jsonb,
     is_active BOOLEAN DEFAULT TRUE,
-    schedule_cron TEXT,        -- optional, for future scheduler
+    schedule_cron TEXT,
     last_run_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Discovery runs (one per source-trigger).
+-- ----------------------------------------------------------------------------
+-- Discovery runs: one row per source-fetch job.
+-- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS discovery_runs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     source_id UUID REFERENCES lead_sources(id) ON DELETE SET NULL,
-    status TEXT NOT NULL DEFAULT 'queued',  -- queued|running|completed|failed
+    status TEXT NOT NULL DEFAULT 'queued',
     pages_crawled INTEGER DEFAULT 0,
     leads_found INTEGER DEFAULT 0,
     error_message TEXT,
@@ -41,12 +47,26 @@ CREATE TABLE IF NOT EXISTS discovery_runs (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- The leads themselves.
+-- ----------------------------------------------------------------------------
+-- Target lists: CSV imports / manually curated batches awaiting enrichment.
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS target_lists (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name TEXT NOT NULL,
+    description TEXT,
+    row_count INTEGER DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ----------------------------------------------------------------------------
+-- Leads: the people / companies we're going after.
+-- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS leads (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     source_id UUID REFERENCES lead_sources(id) ON DELETE SET NULL,
     discovery_run_id UUID REFERENCES discovery_runs(id) ON DELETE SET NULL,
     matched_service_id UUID REFERENCES service_offerings(id) ON DELETE SET NULL,
+    target_list_id UUID REFERENCES target_lists(id) ON DELETE SET NULL,
 
     name TEXT,
     company TEXT,
@@ -54,18 +74,29 @@ CREATE TABLE IF NOT EXISTS leads (
     website TEXT,
     location TEXT,
     role TEXT,
+    linkedin_url TEXT,
+    domain TEXT,
 
     project_summary TEXT,
     raw_excerpt TEXT,
     source_url TEXT,
 
-    fit_score INTEGER DEFAULT 0,         -- 0-100, LLM-assigned
-    urgency TEXT DEFAULT 'medium',       -- low|medium|high
+    fit_score INTEGER DEFAULT 0,
+    urgency TEXT DEFAULT 'medium',
     qualification_notes TEXT,
 
-    status TEXT NOT NULL DEFAULT 'new',  -- new|reviewed|contacted|replied|won|lost|trash
-    fingerprint TEXT UNIQUE,             -- hash for dedupe
+    enrichment_status TEXT DEFAULT 'pending',  -- pending|partial|enriched|failed
+    enrichment_data JSONB DEFAULT '{}'::jsonb, -- merged waterfall output
+    enriched_at TIMESTAMPTZ,
+
+    research_summary TEXT,
+    research_data JSONB DEFAULT '{}'::jsonb,   -- LLM deep-research output
+    researched_at TIMESTAMPTZ,
+
+    status TEXT NOT NULL DEFAULT 'new',
+    fingerprint TEXT UNIQUE,
     raw_data JSONB DEFAULT '{}'::jsonb,
+    tags TEXT[] DEFAULT '{}',
 
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -75,16 +106,20 @@ CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status);
 CREATE INDEX IF NOT EXISTS idx_leads_fit_score ON leads(fit_score DESC);
 CREATE INDEX IF NOT EXISTS idx_leads_created_at ON leads(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_leads_email ON leads(email) WHERE email IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_leads_domain ON leads(domain) WHERE domain IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_leads_target_list ON leads(target_list_id);
 
--- Outreach campaigns (one per lead, may have multiple messages later).
+-- ----------------------------------------------------------------------------
+-- Outreach messages.
+-- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS outreach_messages (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     lead_id UUID NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
-    direction TEXT NOT NULL DEFAULT 'outbound',  -- outbound|inbound
+    direction TEXT NOT NULL DEFAULT 'outbound',
     channel TEXT NOT NULL DEFAULT 'email',
     subject TEXT,
     body TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'draft',         -- draft|approved|sent|failed|replied
+    status TEXT NOT NULL DEFAULT 'draft',
     error_message TEXT,
     scheduled_at TIMESTAMPTZ,
     sent_at TIMESTAMPTZ,
@@ -94,7 +129,61 @@ CREATE TABLE IF NOT EXISTS outreach_messages (
 CREATE INDEX IF NOT EXISTS idx_outreach_lead ON outreach_messages(lead_id);
 CREATE INDEX IF NOT EXISTS idx_outreach_status ON outreach_messages(status);
 
--- Trigger to auto-update leads.updated_at.
+-- ----------------------------------------------------------------------------
+-- Enrichment runs: audit trail of which provider returned what.
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS enrichment_runs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    lead_id UUID REFERENCES leads(id) ON DELETE CASCADE,
+    providers_tried TEXT[] DEFAULT '{}',
+    providers_hit TEXT[] DEFAULT '{}',
+    fields_filled TEXT[] DEFAULT '{}',
+    status TEXT NOT NULL DEFAULT 'completed',  -- completed|partial|failed
+    error_message TEXT,
+    raw_results JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_enrichment_lead ON enrichment_runs(lead_id);
+
+-- ----------------------------------------------------------------------------
+-- Scheduled jobs: APScheduler persistence layer (we use it as a simple list,
+-- the scheduler itself loads jobs from this table on startup).
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS scheduled_jobs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name TEXT NOT NULL,
+    kind TEXT NOT NULL,                  -- 'discovery' | 'enrichment_pending' | 'crm_sync'
+    cron TEXT NOT NULL,                  -- 5-field cron expression, UTC
+    payload JSONB DEFAULT '{}'::jsonb,
+    is_active BOOLEAN DEFAULT TRUE,
+    last_run_at TIMESTAMPTZ,
+    last_status TEXT,
+    last_error TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ----------------------------------------------------------------------------
+-- CRM webhook configs: push lead events to HubSpot / Pipedrive / generic JSON.
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS crm_webhooks (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name TEXT NOT NULL,
+    url TEXT NOT NULL,
+    secret TEXT,
+    events TEXT[] DEFAULT '{lead.created,lead.contacted,lead.replied,lead.won}',
+    headers JSONB DEFAULT '{}'::jsonb,
+    body_template TEXT,                  -- optional Jinja-style template; null = full lead json
+    is_active BOOLEAN DEFAULT TRUE,
+    last_fired_at TIMESTAMPTZ,
+    last_status_code INTEGER,
+    last_error TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ----------------------------------------------------------------------------
+-- Updated-at trigger.
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION touch_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -108,7 +197,9 @@ CREATE TRIGGER leads_touch
 BEFORE UPDATE ON leads
 FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
 
--- Seed a couple of sources so the dashboard isn't empty on first boot.
+-- ----------------------------------------------------------------------------
+-- Seed sources so the dashboard isn't empty on first boot.
+-- ----------------------------------------------------------------------------
 INSERT INTO lead_sources (kind, name, config) VALUES
     ('hackernews', 'HN: Who Is Hiring (latest)', '{"thread": "who_is_hiring"}'),
     ('hackernews', 'HN: Who Wants To Be Hired (latest)', '{"thread": "who_wants_to_be_hired"}'),

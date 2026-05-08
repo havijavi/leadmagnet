@@ -10,6 +10,8 @@ type Lead = {
   company?: string;
   email?: string;
   website?: string;
+  domain?: string;
+  linkedin_url?: string;
   role?: string;
   project_summary?: string;
   source_url?: string;
@@ -18,6 +20,11 @@ type Lead = {
   status: string;
   qualification_notes?: string;
   raw_excerpt?: string;
+  enrichment_status: string;
+  enrichment_data?: any;
+  research_summary?: string;
+  research_data?: any;
+  tags: string[];
   created_at: string;
 };
 
@@ -101,6 +108,8 @@ function LeadDrawer({ lead, onClose, onChanged }: { lead: Lead; onClose: () => v
   const [emailVal, setEmailVal] = useState(lead.email || "");
   const [savingEmail, setSavingEmail] = useState(false);
   const [sendErr, setSendErr] = useState<string | null>(null);
+  const [busyOp, setBusyOp] = useState<string | null>(null);
+  const [opMsg, setOpMsg] = useState<string | null>(null);
 
   return (
     <div className="fixed inset-0 bg-black/60 flex justify-end z-50" onClick={onClose}>
@@ -120,7 +129,51 @@ function LeadDrawer({ lead, onClose, onChanged }: { lead: Lead; onClose: () => v
           <Field label="Fit score" value={String(lead.fit_score)} />
           <Field label="Urgency" value={lead.urgency} />
           <Field label="Status" value={lead.status} />
+          <Field label="Enrichment" value={lead.enrichment_status} />
           <Field label="Website" value={lead.website || "—"} link={lead.website} />
+          <Field label="LinkedIn" value={lead.linkedin_url || "—"} link={lead.linkedin_url} />
+        </div>
+
+        <div className="card flex flex-wrap gap-2 items-center">
+          <button
+            className="btn-secondary text-xs"
+            disabled={busyOp === "enrich"}
+            onClick={async () => {
+              setBusyOp("enrich");
+              setOpMsg(null);
+              try {
+                const r = await api<any>("/api/enrichment/run", { method: "POST", body: JSON.stringify({ lead_id: lead.id }) });
+                setOpMsg(`Enrichment: ${r.status}, providers hit: ${(r.providers_hit || []).join(", ") || "none"}`);
+                onChanged();
+              } catch (e: any) {
+                setOpMsg("Error: " + e.message);
+              } finally {
+                setBusyOp(null);
+              }
+            }}
+          >
+            {busyOp === "enrich" ? "enriching…" : "Run waterfall enrichment"}
+          </button>
+          <button
+            className="btn-secondary text-xs"
+            disabled={busyOp === "research"}
+            onClick={async () => {
+              setBusyOp("research");
+              setOpMsg(null);
+              try {
+                await api("/api/research/run", { method: "POST", body: JSON.stringify({ lead_id: lead.id, deep: true }) });
+                setOpMsg("Research complete — see panel below.");
+                onChanged();
+              } catch (e: any) {
+                setOpMsg("Error: " + e.message);
+              } finally {
+                setBusyOp(null);
+              }
+            }}
+          >
+            {busyOp === "research" ? "researching…" : "AI research (deep)"}
+          </button>
+          {opMsg && <span className="text-xs text-muted">{opMsg}</span>}
         </div>
 
         <div className="card">
@@ -135,6 +188,21 @@ function LeadDrawer({ lead, onClose, onChanged }: { lead: Lead; onClose: () => v
             </a>
           )}
         </div>
+
+        {lead.research_summary && (
+          <div className="card">
+            <div className="text-xs text-muted uppercase">AI research</div>
+            <p className="mt-1 text-sm">{lead.research_summary}</p>
+            {lead.research_data && (
+              <details className="mt-2">
+                <summary className="text-xs text-muted cursor-pointer">full dossier</summary>
+                <pre className="text-xs mt-2 whitespace-pre-wrap text-muted overflow-auto max-h-60">
+                  {JSON.stringify(lead.research_data, null, 2)}
+                </pre>
+              </details>
+            )}
+          </div>
+        )}
 
         <div className="card">
           <div className="text-xs text-muted uppercase">Raw excerpt</div>

@@ -61,6 +61,10 @@ services:
       CRAWLER_CONCURRENCY: ${CRAWLER_CONCURRENCY:-4}
       CRAWLER_USER_AGENT: ${CRAWLER_USER_AGENT:-}
       SEARXNG_URL: ${SEARXNG_URL:-}
+      HUNTER_API_KEY: ${HUNTER_API_KEY:-}
+      SNOV_CLIENT_ID: ${SNOV_CLIENT_ID:-}
+      SNOV_CLIENT_SECRET: ${SNOV_CLIENT_SECRET:-}
+      SCHEDULER_ENABLED: ${SCHEDULER_ENABLED:-true}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:
@@ -77,9 +81,26 @@ services:
       - backend
     environment:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
-      ADMIN_TOKEN: ${ADMIN_TOKEN:-changeme}
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
+
+  # Spreadsheet-style UI on top of the same Postgres — point it at the
+  # leads / outreach_messages / target_lists tables for a Clay-like view.
+  # Open http://<host>:8080 and connect using DATABASE_URL credentials.
+  nocodb:
+    image: nocodb/nocodb:latest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NC_DB: "pg://postgres:5432?u=${POSTGRES_USER:-leadmagnet}&p=${POSTGRES_PASSWORD:-leadmagnet}&d=${POSTGRES_DB:-leadmagnet}"
+      NC_AUTH_JWT_SECRET: ${NOCODB_JWT_SECRET:-changeme-jwt-secret}
+      NC_PUBLIC_URL: ${NOCODB_PUBLIC_URL:-http://localhost:8080}
+    ports:
+      - "${NOCODB_PORT:-8080}:8080"
+    volumes:
+      - nocodb_data:/usr/app/data
 
   caddy:
     image: caddy:2-alpine
@@ -88,39 +109,23 @@ services:
     depends_on:
       - frontend
       - backend
+      - nocodb
     ports:
       - "80:80"
       - "443:443"
     environment:
       DOMAIN: ${DOMAIN:-localhost}
       ACME_EMAIL: ${ACME_EMAIL:-}
+      NOCODB_DOMAIN: ${NOCODB_DOMAIN:-}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
-
-  n8n:
-    image: n8nio/n8n:latest
-    restart: unless-stopped
-    profiles: ["n8n"]
-    environment:
-      N8N_BASIC_AUTH_ACTIVE: "true"
-      N8N_BASIC_AUTH_USER: ${N8N_USER:-admin}
-      N8N_BASIC_AUTH_PASSWORD: ${N8N_PASSWORD:-changeme}
-      N8N_HOST: ${DOMAIN:-localhost}
-      N8N_PROTOCOL: ${N8N_PROTOCOL:-http}
-      WEBHOOK_URL: ${N8N_WEBHOOK_URL:-http://localhost:5678}
-      GENERIC_TIMEZONE: ${TZ:-UTC}
-    ports:
-      - "${N8N_PORT:-5678}:5678"
-    volumes:
-      - n8n_data:/home/node/.n8n
-      - ./n8n-workflows:/workflows:ro
 
 volumes:
   postgres_data:
   redis_data:
   caddy_data:
   caddy_config:
-  n8n_data:
+  nocodb_data:
   crawler_cache:

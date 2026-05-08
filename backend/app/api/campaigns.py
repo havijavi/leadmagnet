@@ -13,6 +13,7 @@ from app.schemas import (
     OutreachMessageOut,
     OutreachUpdate,
 )
+from app.services.crm_push import fire_event
 from app.services.emailer import EmailerError, emailer
 from app.services.extractor import draft_outreach
 
@@ -119,4 +120,9 @@ async def send(message_id: UUID, session: AsyncSession = Depends(get_session)) -
     lead.status = "contacted"
     await session.commit()
     await session.refresh(msg)
+
+    try:
+        await fire_event("lead.contacted", lead.id)
+    except Exception:
+        pass
     return OutreachMessageOut.model_validate(msg)

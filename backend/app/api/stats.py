@@ -24,13 +24,21 @@ async def stats(session: AsyncSession = Depends(get_session)) -> StatsOut:
         high_fit_count=int(
             await session.scalar(
                 select(func.count(Lead.id)).where(Lead.fit_score >= settings.NOTIFY_FIT_THRESHOLD)
-            )
-            or 0
+            ) or 0
         ),
         discovery_runs_24h=int(
             await session.scalar(
                 select(func.count(DiscoveryRun.id)).where(DiscoveryRun.created_at >= cutoff)
-            )
-            or 0
+            ) or 0
+        ),
+        leads_enriched=int(
+            await session.scalar(
+                select(func.count(Lead.id)).where(Lead.enrichment_status == "enriched")
+            ) or 0
+        ),
+        leads_pending_enrichment=int(
+            await session.scalar(
+                select(func.count(Lead.id)).where(Lead.enrichment_status == "pending")
+            ) or 0
         ),
     )

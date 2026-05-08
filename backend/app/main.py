@@ -3,19 +3,38 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import campaigns, discovery, health, leads, services, sources, stats
+from app.api import (
+    campaigns,
+    crm,
+    discovery,
+    enrichment,
+    health,
+    imports,
+    leads,
+    research,
+    schedules,
+    services,
+    sources,
+    stats,
+)
+from app.services import scheduler
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Schema is created by db/init.sql when Postgres boots; nothing to do here yet.
-    yield
+    await scheduler.start()
+    try:
+        yield
+    finally:
+        await scheduler.stop()
 
 
 app = FastAPI(
     title="LeadMagnet API",
-    version="0.1.0",
-    description="Open-source Apify-replacement plus a built-in lead generation, qualification, and outreach pipeline.",
+    version="0.2.0",
+    description="Self-hosted Apify + Clay replacement: scraping, AI extraction, "
+                "waterfall enrichment, prospect research, scheduled jobs, "
+                "outreach, and CRM webhooks.",
     lifespan=lifespan,
 )
 
@@ -34,3 +53,8 @@ app.include_router(sources.router, prefix="/api/sources", tags=["sources"])
 app.include_router(discovery.router, prefix="/api/discovery", tags=["discovery"])
 app.include_router(leads.router, prefix="/api/leads", tags=["leads"])
 app.include_router(campaigns.router, prefix="/api/campaigns", tags=["campaigns"])
+app.include_router(enrichment.router, prefix="/api/enrichment", tags=["enrichment"])
+app.include_router(imports.router, prefix="/api/import", tags=["import"])
+app.include_router(research.router, prefix="/api/research", tags=["research"])
+app.include_router(schedules.router, prefix="/api/schedules", tags=["schedules"])
+app.include_router(crm.router, prefix="/api/crm", tags=["crm"])

@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Any, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class _Base(BaseModel):
@@ -52,7 +52,7 @@ class LeadSourceOut(_Base):
     created_at: datetime
 
 
-# ---------- Discovery runs ----------
+# ---------- Discovery ----------
 
 class DiscoveryRunOut(_Base):
     id: UUID
@@ -72,25 +72,51 @@ class DiscoveryTrigger(BaseModel):
     extra_urls: list[str] = Field(default_factory=list)
 
 
+# ---------- Target lists ----------
+
+class TargetListOut(_Base):
+    id: UUID
+    name: str
+    description: Optional[str]
+    row_count: int
+    created_at: datetime
+
+
 # ---------- Leads ----------
 
 class LeadOut(_Base):
     id: UUID
     source_id: Optional[UUID]
     matched_service_id: Optional[UUID]
+    target_list_id: Optional[UUID]
+
     name: Optional[str]
     company: Optional[str]
     email: Optional[str]
     website: Optional[str]
     location: Optional[str]
     role: Optional[str]
+    linkedin_url: Optional[str]
+    domain: Optional[str]
+
     project_summary: Optional[str]
     raw_excerpt: Optional[str]
     source_url: Optional[str]
+
     fit_score: int
     urgency: str
     qualification_notes: Optional[str]
+
+    enrichment_status: str
+    enrichment_data: dict
+    enriched_at: Optional[datetime]
+
+    research_summary: Optional[str]
+    research_data: dict
+    researched_at: Optional[datetime]
+
     status: str
+    tags: list[str]
     created_at: datetime
     updated_at: datetime
 
@@ -100,7 +126,26 @@ class LeadUpdate(BaseModel):
     fit_score: Optional[int] = None
     qualification_notes: Optional[str] = None
     name: Optional[str] = None
+    company: Optional[str] = None
     email: Optional[str] = None
+    website: Optional[str] = None
+    domain: Optional[str] = None
+    linkedin_url: Optional[str] = None
+    role: Optional[str] = None
+    tags: Optional[list[str]] = None
+
+
+class LeadCreate(BaseModel):
+    name: Optional[str] = None
+    company: Optional[str] = None
+    email: Optional[str] = None
+    website: Optional[str] = None
+    domain: Optional[str] = None
+    linkedin_url: Optional[str] = None
+    role: Optional[str] = None
+    location: Optional[str] = None
+    target_list_id: Optional[UUID] = None
+    tags: list[str] = Field(default_factory=list)
 
 
 # ---------- Outreach ----------
@@ -127,8 +172,96 @@ class OutreachMessageOut(_Base):
 class OutreachUpdate(BaseModel):
     subject: Optional[str] = None
     body: Optional[str] = None
-    status: Optional[str] = None  # 'approved' to mark for send
+    status: Optional[str] = None
 
+
+# ---------- Enrichment ----------
+
+class EnrichmentRunOut(_Base):
+    id: UUID
+    lead_id: Optional[UUID]
+    providers_tried: list[str]
+    providers_hit: list[str]
+    fields_filled: list[str]
+    status: str
+    error_message: Optional[str]
+    raw_results: dict
+    created_at: datetime
+
+
+class EnrichmentRequest(BaseModel):
+    lead_id: Optional[UUID] = None
+    # Or supply identifiers directly for an ad-hoc enrichment:
+    name: Optional[str] = None
+    company: Optional[str] = None
+    domain: Optional[str] = None
+    email: Optional[str] = None
+    linkedin_url: Optional[str] = None
+    providers: Optional[list[str]] = None  # subset; default = all configured
+
+
+class EnrichmentBatchRequest(BaseModel):
+    lead_ids: Optional[list[UUID]] = None
+    target_list_id: Optional[UUID] = None
+    only_pending: bool = True
+    providers: Optional[list[str]] = None
+
+
+class ResearchRequest(BaseModel):
+    lead_id: UUID
+    deep: bool = False  # if true, also crawl the company website
+
+
+# ---------- Schedules ----------
+
+class ScheduledJobIn(BaseModel):
+    name: str
+    kind: str  # 'discovery' | 'enrichment_pending' | 'crm_sync'
+    cron: str
+    payload: dict[str, Any] = Field(default_factory=dict)
+    is_active: bool = True
+
+
+class ScheduledJobOut(_Base):
+    id: UUID
+    name: str
+    kind: str
+    cron: str
+    payload: dict[str, Any]
+    is_active: bool
+    last_run_at: Optional[datetime]
+    last_status: Optional[str]
+    last_error: Optional[str]
+    created_at: datetime
+
+
+# ---------- CRM webhooks ----------
+
+class CrmWebhookIn(BaseModel):
+    name: str
+    url: str
+    secret: Optional[str] = None
+    events: list[str] = Field(default_factory=lambda: ["lead.created", "lead.contacted", "lead.replied", "lead.won"])
+    headers: dict[str, str] = Field(default_factory=dict)
+    body_template: Optional[str] = None
+    is_active: bool = True
+
+
+class CrmWebhookOut(_Base):
+    id: UUID
+    name: str
+    url: str
+    events: list[str]
+    headers: dict[str, str]
+    body_template: Optional[str]
+    is_active: bool
+    last_fired_at: Optional[datetime]
+    last_status_code: Optional[int]
+    last_error: Optional[str]
+    created_at: datetime
+
+
+# ---------- Stats ----------
 
 class StatsOut(BaseModel):
     leads_total: int
@@ -137,3 +270,5 @@ class StatsOut(BaseModel):
     leads_replied: int
     high_fit_count: int
     discovery_runs_24h: int
+    leads_enriched: int
+    leads_pending_enrichment: int

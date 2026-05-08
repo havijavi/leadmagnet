@@ -9,6 +9,7 @@ from app.auth import require_admin
 from app.db import get_session
 from app.models import Lead
 from app.schemas import LeadOut, LeadUpdate
+from app.services.crm_push import fire_event
 
 router = APIRouter(dependencies=[Depends(require_admin)])
 
@@ -17,6 +18,8 @@ router = APIRouter(dependencies=[Depends(require_admin)])
 async def list_leads(
     session: AsyncSession = Depends(get_session),
     status: Optional[str] = Query(None),
+    enrichment_status: Optional[str] = Query(None),
+    target_list_id: Optional[UUID] = Query(None),
     min_score: int = Query(0, ge=0, le=100),
     limit: int = Query(100, le=500),
     offset: int = Query(0, ge=0),
@@ -24,6 +27,10 @@ async def list_leads(
     stmt = select(Lead).where(Lead.fit_score >= min_score)
     if status:
         stmt = stmt.where(Lead.status == status)
+    if enrichment_status:
+        stmt = stmt.where(Lead.enrichment_status == enrichment_status)
+    if target_list_id:
+        stmt = stmt.where(Lead.target_list_id == target_list_id)
     stmt = stmt.order_by(desc(Lead.fit_score), desc(Lead.created_at)).limit(limit).offset(offset)
     rows = await session.scalars(stmt)
     return [LeadOut.model_validate(r) for r in rows]
@@ -46,10 +53,18 @@ async def update_lead(
     obj = await session.get(Lead, lead_id)
     if not obj:
         raise HTTPException(404, "lead not found")
+    prev_status = obj.status
     for k, v in payload.model_dump(exclude_unset=True).items():
         setattr(obj, k, v)
     await session.commit()
     await session.refresh(obj)
+
+    if payload.status and payload.status != prev_status:
+        evt = f"lead.{payload.status}"
+        try:
+            await fire_event(evt, lead_id)
+        except Exception:
+            pass
     return LeadOut.model_validate(obj)
 
 
