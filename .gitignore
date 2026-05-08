@@ -1,0 +1,44 @@
+# env / secrets
+.env
+.env.local
+.env.production
+*.pem
+*.key
+
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# node
+node_modules/
+.next/
+.turbo/
+out/
+dist/
+build/
+
+# editors / OS
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# docker / data
+caddy_data/
+caddy_config/
+postgres_data/
+redis_data/
+n8n_data/
+backend/data/
+crawler_cache/
+
+# logs
+*.log
+logs/

@@ -1,0 +1,126 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-leadmagnet}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-leadmagnet}
+      POSTGRES_DB: ${POSTGRES_DB:-leadmagnet}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-leadmagnet}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-leadmagnet}:${POSTGRES_PASSWORD:-leadmagnet}@postgres:5432/${POSTGRES_DB:-leadmagnet}
+      REDIS_URL: redis://redis:6379/0
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-changeme}
+      LLM_PROVIDER: ${LLM_PROVIDER:-deepseek}
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://api.deepseek.com/v1}
+      LLM_MODEL: ${LLM_MODEL:-deepseek-chat}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-LeadMagnet}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      NOTIFY_WEBHOOK_URL: ${NOTIFY_WEBHOOK_URL:-}
+      NOTIFY_EMAIL: ${NOTIFY_EMAIL:-}
+      CRAWLER_CONCURRENCY: ${CRAWLER_CONCURRENCY:-4}
+      CRAWLER_USER_AGENT: ${CRAWLER_USER_AGENT:-}
+      SEARXNG_URL: ${SEARXNG_URL:-}
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      - crawler_cache:/root/.crawl4ai
+    shm_size: 1gb
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-changeme}
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    profiles: ["prod"]
+    depends_on:
+      - frontend
+      - backend
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+      ACME_EMAIL: ${ACME_EMAIL:-}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+  n8n:
+    image: n8nio/n8n:latest
+    restart: unless-stopped
+    profiles: ["n8n"]
+    environment:
+      N8N_BASIC_AUTH_ACTIVE: "true"
+      N8N_BASIC_AUTH_USER: ${N8N_USER:-admin}
+      N8N_BASIC_AUTH_PASSWORD: ${N8N_PASSWORD:-changeme}
+      N8N_HOST: ${DOMAIN:-localhost}
+      N8N_PROTOCOL: ${N8N_PROTOCOL:-http}
+      WEBHOOK_URL: ${N8N_WEBHOOK_URL:-http://localhost:5678}
+      GENERIC_TIMEZONE: ${TZ:-UTC}
+    ports:
+      - "${N8N_PORT:-5678}:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n-workflows:/workflows:ro
+
+volumes:
+  postgres_data:
+  redis_data:
+  caddy_data:
+  caddy_config:
+  n8n_data:
+  crawler_cache:
