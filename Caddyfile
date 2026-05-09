@@ -1,3 +1,10 @@
+# Caddyfile — auto-HTTPS via Let's Encrypt for the LeadMagnet domain.
+#
+# Caddy's "handle" matcher preserves the request path; we deliberately do NOT
+# use "handle_path" here because the FastAPI backend serves its routes under
+# /api/*, /docs, /openapi.json, and /health — stripping the prefix would 404
+# every request.
+
 {
 	email {$ACME_EMAIL}
 }
@@ -5,19 +12,39 @@
 {$DOMAIN} {
 	encode gzip zstd
 
-	handle_path /api/* {
-		reverse_proxy backend:8000
+	# Forward client IP / scheme to the backend so logs and rate-limiting
+	# (when added later) see the real caller, not the Caddy container.
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
 	}
-	handle /docs {
+
+	# Backend — preserve the full path including the /api prefix.
+	handle /api/* {
+		reverse_proxy backend:8000 {
+			header_up X-Forwarded-Proto {scheme}
+			header_up X-Forwarded-Host {host}
+		}
+	}
+
+	# Swagger UI + OpenAPI schema (FastAPI defaults).
+	handle /docs* {
 		reverse_proxy backend:8000
 	}
 	handle /openapi.json {
 		reverse_proxy backend:8000
 	}
+	handle /redoc* {
+		reverse_proxy backend:8000
+	}
+
+	# Public health check, useful for uptime monitors.
 	handle /health {
 		reverse_proxy backend:8000
 	}
 
+	# Everything else → Next.js dashboard.
 	handle {
 		reverse_proxy frontend:3000
 	}

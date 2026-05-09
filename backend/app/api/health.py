@@ -13,7 +13,7 @@ async def health() -> dict:
     sheets_status = google_sheets.status()
     return {
         "status": "ok",
-        "version": "0.3.0",
+        "version": "0.4.1",
         "llm_provider": settings.LLM_PROVIDER,
         "llm_model": settings.LLM_MODEL,
         "llm_mock_mode": llm.is_mock,

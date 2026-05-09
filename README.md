@@ -57,9 +57,21 @@ docker compose up -d --build
 
 The dashboard prompts for `ADMIN_TOKEN` on first load — paste it from your `.env`. Google Sheets sync (the spreadsheet view) is configured under `/sheets` once you've added a service account — see below.
 
-## Deploy to a Contabo VPS
+## Deploy to a VPS with HTTPS on your own domain
 
-DNS: point `leadmagnet.yourdomain.com` at the VPS IP. Then on a fresh Ubuntu/Debian box:
+LeadMagnet is built to run on a single small VPS (Contabo, Hetzner, DigitalOcean — anything with 2 GB+ RAM and Docker support) at a real domain with auto-HTTPS via Let's Encrypt. This is the recommended path; running on a bare IP without HTTPS is fine for poking around but unsuitable for real lead data and outreach.
+
+### 1. Point DNS at the VPS
+
+In your domain registrar, add an `A` record:
+
+| Host                  | Type | Value         |
+| --------------------- | ---- | ------------- |
+| `leadmagnet`          | A    | <your-vps-ip> |
+
+Wait until `dig +short leadmagnet.yourdomain.com` returns the VPS IP — usually under a minute, can take longer. The deploy script will pre-check this and refuse to proceed if DNS hasn't propagated, so Caddy doesn't burn through Let's Encrypt's rate limits trying to acquire a cert for a domain that doesn't resolve.
+
+### 2. Run the bootstrap on a fresh Ubuntu/Debian VPS
 
 ```bash
 sudo DOMAIN=leadmagnet.yourdomain.com \
@@ -67,7 +79,66 @@ sudo DOMAIN=leadmagnet.yourdomain.com \
      bash <(curl -fsSL https://raw.githubusercontent.com/havijavi/leadmagnet/main/deploy/setup-vps.sh)
 ```
 
-The script installs Docker, clones this repo to `/opt/leadmagnet`, generates strong secrets in `.env`, and brings the stack up under Caddy with auto-HTTPS.
+The script:
+
+1. Installs Docker + compose plugin if missing.
+2. Opens UFW ports 22, 80, 443.
+3. Pre-flights DNS (`dig`-checks that the domain resolves to this VPS).
+4. Clones the repo to `/opt/leadmagnet`.
+5. Generates strong `ADMIN_TOKEN`, `JWT_SECRET`, and `POSTGRES_PASSWORD` in `.env` on first run.
+6. Sets `DOMAIN`, `ACME_EMAIL`, and `NEXT_PUBLIC_API_URL=https://<your-domain>`.
+7. Brings up the stack with the `prod` profile so Caddy is included.
+8. Waits for the backend `/health` to come up and smoke-tests `https://<domain>/health` before printing the success banner.
+
+Re-run the script any time — it preserves the existing `.env` and just pulls + rebuilds.
+
+### 3. Open the dashboard and create the first admin
+
+```
+https://leadmagnet.yourdomain.com
+```
+
+You'll be redirected to `/setup` to create the first admin account (email + password). After that, sign in at `/login` and invite teammates from **Users** in the sidebar.
+
+### 4. (Optional) Verify any time
+
+```bash
+cd /opt/leadmagnet
+./deploy/verify.sh
+```
+
+Curls `/health`, `/docs`, `/openapi.json`, and `/api/auth/needs-setup` against the public URL, plus prints `docker compose ps`. Fits cleanly into a monitoring cron.
+
+### 5. Updating
+
+```bash
+cd /opt/leadmagnet
+./deploy/update.sh   # git pull + rebuild + restart
+```
+
+### What gets routed where
+
+Caddy handles everything on ports 80 and 443:
+
+| Path on `https://<domain>` | Routed to                | Public? |
+| -------------------------- | ------------------------ | ------- |
+| `/api/*`                   | `backend:8000`           | bearer-auth required |
+| `/docs`, `/redoc`, `/openapi.json` | `backend:8000`   | yes (read-only Swagger) |
+| `/health`                  | `backend:8000`           | yes (for uptime monitors) |
+| anything else              | `frontend:3000` (Next.js) | gated by `/setup` + `/login` |
+
+Caddy also adds HSTS, `X-Content-Type-Options`, and `Referrer-Policy` headers, and forwards `X-Forwarded-Proto` / `X-Forwarded-Host` so the backend sees the original scheme and host.
+
+### Subdomain alternative (if you'd rather split UI and API)
+
+If you want `app.example.com` for the dashboard and `api.example.com` for the backend, point both A records at the VPS and replace the single-domain block in `Caddyfile` with two site blocks. The included single-domain layout works for 95% of setups and avoids a separate CORS allowlist.
+
+### Troubleshooting
+
+- **Cert acquisition fails**: most common cause is DNS not pointing at the VPS, or port 80 being blocked by your provider's firewall (separate from UFW). Tail `docker compose logs -f caddy`.
+- **Dashboard loads but `/api/*` 404s**: this used to happen on early versions due to a Caddy `handle_path` prefix-strip bug — fixed in v0.4.1. Pull and rebuild.
+- **Locked out of the dashboard**: use the `ADMIN_TOKEN` from `/opt/leadmagnet/.env` as a Bearer token against `/api/users` to reset another admin's password, or via the Swagger UI at `https://<domain>/docs`.
+- **Backups**: the only volume that holds irreplaceable data is `postgres_data`. Snapshot it via `docker compose exec postgres pg_dump -U leadmagnet leadmagnet > leadmagnet-$(date +%F).sql` on a cron.
 
 ## Authentication & roles
 

@@ -34,7 +34,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="LeadMagnet API",
-    version="0.4.0",
+    version="0.4.1",
     description=(
         "Self-hosted Apify + Clay replacement. Per-user accounts with three roles "
         "(admin / member / viewer); .env ADMIN_TOKEN remains a break-glass superuser."

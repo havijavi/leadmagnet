@@ -55,7 +55,7 @@ export default function Sidebar() {
     <aside className="w-60 shrink-0 border-r border-border bg-panel min-h-screen p-4 flex flex-col">
       <div className="mb-6 px-2">
         <div className="font-bold text-lg">⚡ LeadMagnet</div>
-        <div className="text-xs text-muted">v0.4.0</div>
+        <div className="text-xs text-muted">v0.4.1</div>
       </div>
 
       <nav className="flex flex-col gap-4 flex-1">
@@ -99,7 +99,7 @@ export default function Sidebar() {
         <div className="px-3 mt-4">
           <div className="text-[10px] uppercase tracking-wider text-muted mb-1">External</div>
           <a
-            href="http://localhost:8000/docs"
+            href="/docs"
             target="_blank"
             rel="noopener noreferrer"
             className="block px-3 py-2 rounded-lg text-sm text-muted hover:text-text"
