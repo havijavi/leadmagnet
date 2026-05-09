@@ -61,11 +61,11 @@ if [[ ! -f .env ]]; then
   echo "==> Generating .env"
   cp .env.example .env
   ADMIN_TOKEN=$(openssl rand -hex 32)
+  JWT_SECRET=$(openssl rand -hex 32)
   POSTGRES_PASSWORD=$(openssl rand -hex 16)
-  N8N_PASSWORD=$(openssl rand -hex 12)
   sed -i "s|^ADMIN_TOKEN=.*|ADMIN_TOKEN=$ADMIN_TOKEN|" .env
+  sed -i "s|^JWT_SECRET=.*|JWT_SECRET=$JWT_SECRET|" .env
   sed -i "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$POSTGRES_PASSWORD|" .env
-  sed -i "s|^N8N_PASSWORD=.*|N8N_PASSWORD=$N8N_PASSWORD|" .env
   if [[ -n "$DOMAIN" ]]; then
     sed -i "s|^DOMAIN=.*|DOMAIN=$DOMAIN|" .env
     sed -i "s|^NEXT_PUBLIC_API_URL=.*|NEXT_PUBLIC_API_URL=https://$DOMAIN|" .env
@@ -76,7 +76,9 @@ if [[ ! -f .env ]]; then
   echo
   echo "----------------------------------------------"
   echo "  Generated ADMIN_TOKEN: $ADMIN_TOKEN"
-  echo "  Save this — you'll paste it into the dashboard sign-in screen."
+  echo "  Keep this safe — it is a SUPERUSER bearer token (bypasses login)."
+  echo "  On first dashboard visit you'll be asked to create the first admin"
+  echo "  account; after that, sign in with email + password as normal."
   echo "----------------------------------------------"
   echo
 fi

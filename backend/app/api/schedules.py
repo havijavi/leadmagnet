@@ -4,30 +4,30 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import require_admin
+from app.auth import require_admin, require_any
 from app.db import get_session
 from app.models import ScheduledJob
 from app.schemas import ScheduledJobIn, ScheduledJobOut
 from app.services.scheduler import reload_jobs
 
-router = APIRouter(dependencies=[Depends(require_admin)])
+router = APIRouter()
 
 
 VALID_KINDS = {"discovery", "enrichment_pending", "sheets_sync", "crm_sync"}
 
 
-@router.get("/kinds")
+@router.get("/kinds", dependencies=[Depends(require_any)])
 async def kinds() -> dict:
     return {"kinds": sorted(VALID_KINDS)}
 
 
-@router.get("", response_model=list[ScheduledJobOut])
+@router.get("", response_model=list[ScheduledJobOut], dependencies=[Depends(require_any)])
 async def list_jobs(session: AsyncSession = Depends(get_session)) -> list[ScheduledJobOut]:
     rows = await session.scalars(select(ScheduledJob).order_by(ScheduledJob.created_at.desc()))
     return [ScheduledJobOut.model_validate(r) for r in rows]
 
 
-@router.post("", response_model=ScheduledJobOut, status_code=201)
+@router.post("", response_model=ScheduledJobOut, status_code=201, dependencies=[Depends(require_admin)])
 async def create_job(payload: ScheduledJobIn, session: AsyncSession = Depends(get_session)) -> ScheduledJobOut:
     if payload.kind not in VALID_KINDS:
         raise HTTPException(400, f"invalid kind, valid: {sorted(VALID_KINDS)}")
@@ -39,7 +39,7 @@ async def create_job(payload: ScheduledJobIn, session: AsyncSession = Depends(ge
     return ScheduledJobOut.model_validate(obj)
 
 
-@router.put("/{job_id}", response_model=ScheduledJobOut)
+@router.put("/{job_id}", response_model=ScheduledJobOut, dependencies=[Depends(require_admin)])
 async def update_job(job_id: UUID, payload: ScheduledJobIn, session: AsyncSession = Depends(get_session)) -> ScheduledJobOut:
     obj = await session.get(ScheduledJob, job_id)
     if not obj:
@@ -52,7 +52,7 @@ async def update_job(job_id: UUID, payload: ScheduledJobIn, session: AsyncSessio
     return ScheduledJobOut.model_validate(obj)
 
 
-@router.delete("/{job_id}", status_code=204)
+@router.delete("/{job_id}", status_code=204, dependencies=[Depends(require_admin)])
 async def delete_job(job_id: UUID, session: AsyncSession = Depends(get_session)) -> None:
     obj = await session.get(ScheduledJob, job_id)
     if obj:

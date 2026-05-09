@@ -5,6 +5,26 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- ----------------------------------------------------------------------------
+-- Users with per-account login + role-based access.
+-- Roles:
+--   admin  - everything (services, sources, schedules, sheets, crm, users)
+--   member - daily-use pipeline (discovery, enrichment, leads, outreach)
+--   viewer - read-only on leads / campaigns / dashboard
+-- ADMIN_TOKEN in .env still works as a break-glass superuser bearer token.
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS users (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    email TEXT UNIQUE NOT NULL,
+    name TEXT,
+    password_hash TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'member',
+    is_active BOOLEAN DEFAULT TRUE,
+    last_login_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+
+-- ----------------------------------------------------------------------------
 -- Service offerings: what the user sells.
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS service_offerings (

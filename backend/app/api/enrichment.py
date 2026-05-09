@@ -5,7 +5,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import require_admin
+from app.auth import require_member
 from app.db import get_session
 from app.models import EnrichmentRun, Lead
 from app.schemas import (
@@ -18,7 +18,7 @@ from app.services.enrichment.types import Subject
 from app.services.enrichment.waterfall import run_waterfall
 from app.workers.enrichment_worker import enrich_batch, enrich_lead, enrich_pending
 
-router = APIRouter(dependencies=[Depends(require_admin)])
+router = APIRouter(dependencies=[Depends(require_member)])
 
 
 @router.get("/providers")

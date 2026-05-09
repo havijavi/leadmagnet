@@ -4,21 +4,21 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import require_admin
+from app.auth import require_admin, require_any
 from app.db import get_session
 from app.models import ServiceOffering
 from app.schemas import ServiceOfferingIn, ServiceOfferingOut
 
-router = APIRouter(dependencies=[Depends(require_admin)])
+router = APIRouter()
 
 
-@router.get("", response_model=list[ServiceOfferingOut])
+@router.get("", response_model=list[ServiceOfferingOut], dependencies=[Depends(require_any)])
 async def list_services(session: AsyncSession = Depends(get_session)) -> list[ServiceOfferingOut]:
     rows = await session.scalars(select(ServiceOffering).order_by(ServiceOffering.created_at.desc()))
     return [ServiceOfferingOut.model_validate(r) for r in rows]
 
 
-@router.post("", response_model=ServiceOfferingOut, status_code=201)
+@router.post("", response_model=ServiceOfferingOut, status_code=201, dependencies=[Depends(require_admin)])
 async def create_service(
     payload: ServiceOfferingIn,
     session: AsyncSession = Depends(get_session),
@@ -30,7 +30,7 @@ async def create_service(
     return ServiceOfferingOut.model_validate(obj)
 
 
-@router.put("/{service_id}", response_model=ServiceOfferingOut)
+@router.put("/{service_id}", response_model=ServiceOfferingOut, dependencies=[Depends(require_admin)])
 async def update_service(
     service_id: UUID,
     payload: ServiceOfferingIn,
@@ -46,7 +46,7 @@ async def update_service(
     return ServiceOfferingOut.model_validate(obj)
 
 
-@router.delete("/{service_id}", status_code=204)
+@router.delete("/{service_id}", status_code=204, dependencies=[Depends(require_admin)])
 async def delete_service(service_id: UUID, session: AsyncSession = Depends(get_session)) -> None:
     obj = await session.get(ServiceOffering, service_id)
     if obj:

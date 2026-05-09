@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import (
+    auth,
     campaigns,
     crm,
     discovery,
@@ -17,6 +18,7 @@ from app.api import (
     sheets,
     sources,
     stats,
+    users,
 )
 from app.services import scheduler
 
@@ -32,10 +34,11 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="LeadMagnet API",
-    version="0.2.0",
-    description="Self-hosted Apify + Clay replacement: scraping, AI extraction, "
-                "waterfall enrichment, prospect research, scheduled jobs, "
-                "outreach, and CRM webhooks.",
+    version="0.4.0",
+    description=(
+        "Self-hosted Apify + Clay replacement. Per-user accounts with three roles "
+        "(admin / member / viewer); .env ADMIN_TOKEN remains a break-glass superuser."
+    ),
     lifespan=lifespan,
 )
 
@@ -48,6 +51,8 @@ app.add_middleware(
 )
 
 app.include_router(health.router)
+app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
+app.include_router(users.router, prefix="/api/users", tags=["users"])
 app.include_router(stats.router, prefix="/api/stats", tags=["stats"])
 app.include_router(services.router, prefix="/api/services", tags=["services"])
 app.include_router(sources.router, prefix="/api/sources", tags=["sources"])

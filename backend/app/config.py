@@ -1,4 +1,6 @@
+import hashlib
 from functools import lru_cache
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -7,7 +9,16 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str = "postgresql+asyncpg://leadmagnet:leadmagnet@postgres:5432/leadmagnet"
     REDIS_URL: str = "redis://redis:6379/0"
+
+    # ADMIN_TOKEN is the break-glass superuser bearer token. Anyone presenting
+    # it is treated as an admin without a user account. Used by the setup-vps
+    # script and useful for emergency access if you've locked yourself out.
     ADMIN_TOKEN: str = "changeme"
+
+    # Signs JWTs issued at /api/auth/login. Auto-derived from ADMIN_TOKEN if
+    # left blank — fine for solo use, set explicitly when sharing the box.
+    JWT_SECRET: str = ""
+    JWT_TTL_SECONDS: int = 86400  # 24 hours
 
     LLM_PROVIDER: str = "deepseek"
     LLM_BASE_URL: str = "https://api.deepseek.com/v1"
@@ -44,6 +55,12 @@ class Settings(BaseSettings):
     SCHEDULER_ENABLED: bool = True
 
     NOTIFY_FIT_THRESHOLD: int = 70
+
+    @property
+    def effective_jwt_secret(self) -> str:
+        if self.JWT_SECRET:
+            return self.JWT_SECRET
+        return hashlib.sha256(b"jwt:" + self.ADMIN_TOKEN.encode()).hexdigest()
 
 
 @lru_cache

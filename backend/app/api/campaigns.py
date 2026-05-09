@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import require_admin
+from app.auth import require_any, require_member
 from app.db import get_session
 from app.models import Lead, OutreachMessage, ServiceOffering
 from app.schemas import (
@@ -17,10 +17,10 @@ from app.services.crm_push import fire_event
 from app.services.emailer import EmailerError, emailer
 from app.services.extractor import draft_outreach
 
-router = APIRouter(dependencies=[Depends(require_admin)])
+router = APIRouter()
 
 
-@router.get("", response_model=list[OutreachMessageOut])
+@router.get("", response_model=list[OutreachMessageOut], dependencies=[Depends(require_any)])
 async def list_messages(session: AsyncSession = Depends(get_session)) -> list[OutreachMessageOut]:
     rows = await session.scalars(
         select(OutreachMessage).order_by(OutreachMessage.created_at.desc())
@@ -28,7 +28,7 @@ async def list_messages(session: AsyncSession = Depends(get_session)) -> list[Ou
     return [OutreachMessageOut.model_validate(r) for r in rows]
 
 
-@router.get("/by-lead/{lead_id}", response_model=list[OutreachMessageOut])
+@router.get("/by-lead/{lead_id}", response_model=list[OutreachMessageOut], dependencies=[Depends(require_any)])
 async def by_lead(lead_id: UUID, session: AsyncSession = Depends(get_session)) -> list[OutreachMessageOut]:
     rows = await session.scalars(
         select(OutreachMessage).where(OutreachMessage.lead_id == lead_id).order_by(OutreachMessage.created_at)
@@ -36,7 +36,7 @@ async def by_lead(lead_id: UUID, session: AsyncSession = Depends(get_session)) -
     return [OutreachMessageOut.model_validate(r) for r in rows]
 
 
-@router.post("/draft", response_model=OutreachMessageOut, status_code=201)
+@router.post("/draft", response_model=OutreachMessageOut, status_code=201, dependencies=[Depends(require_member)])
 async def draft(payload: OutreachDraftIn, session: AsyncSession = Depends(get_session)) -> OutreachMessageOut:
     lead = await session.get(Lead, payload.lead_id)
     if not lead:
@@ -75,7 +75,7 @@ async def draft(payload: OutreachDraftIn, session: AsyncSession = Depends(get_se
     return OutreachMessageOut.model_validate(msg)
 
 
-@router.patch("/{message_id}", response_model=OutreachMessageOut)
+@router.patch("/{message_id}", response_model=OutreachMessageOut, dependencies=[Depends(require_member)])
 async def update_message(
     message_id: UUID,
     payload: OutreachUpdate,
@@ -91,7 +91,7 @@ async def update_message(
     return OutreachMessageOut.model_validate(obj)
 
 
-@router.post("/{message_id}/send", response_model=OutreachMessageOut)
+@router.post("/{message_id}/send", response_model=OutreachMessageOut, dependencies=[Depends(require_member)])
 async def send(message_id: UUID, session: AsyncSession = Depends(get_session)) -> OutreachMessageOut:
     msg = await session.get(OutreachMessage, message_id)
     if not msg:

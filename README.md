@@ -69,6 +69,24 @@ sudo DOMAIN=leadmagnet.yourdomain.com \
 
 The script installs Docker, clones this repo to `/opt/leadmagnet`, generates strong secrets in `.env`, and brings the stack up under Caddy with auto-HTTPS.
 
+## Authentication & roles
+
+LeadMagnet has per-user accounts with three roles:
+
+| Role     | Can                                                                |
+| -------- | ------------------------------------------------------------------ |
+| `admin`  | Everything — system config (services, sources, schedules, sheets, CRM), user management, all data ops |
+| `member` | Daily pipeline ops — run discovery, enrichment, research; create/update leads; draft & send outreach; CSV import; trigger sheet syncs |
+| `viewer` | Read-only — browse leads, outreach, schedules, dashboards         |
+
+**First-run setup**: visit the dashboard. If no users exist you'll be sent to `/setup` to create the first admin. After that, `/login` is the entry point.
+
+**`ADMIN_TOKEN` is a break-glass superuser**. Anyone presenting it as a bearer token is treated as admin without a user account. Use it for `setup-vps.sh`, CI scripts, or to recover from a locked-out dashboard. Rotate it in `.env` periodically.
+
+**JWTs are signed with `JWT_SECRET`** (auto-derived from `ADMIN_TOKEN` if blank). Tokens last 24h by default — change with `JWT_TTL_SECONDS`. Sessions live in browser localStorage; sign-out clears them.
+
+**Inviting teammates**: as admin go to **Users** in the sidebar → **+ New user** → choose role + initial password. Send them the URL + credentials. They change their password on `/account`.
+
 ## Configure your LLM (DeepSeek / Qwen / OpenAI / Ollama)
 
 Any OpenAI-compatible API works:
@@ -170,35 +188,50 @@ Outputs: SMTP · Telegram · generic webhooks · CRM webhooks (HubSpot, Pipedriv
 - `/campaigns` — outreach drafts and sends
 - `/schedules` — APScheduler cron jobs (discovery, enrichment, sheets sync, CRM)
 - `/sheets` — Google Sheets sync configurations
-- `/crm` — CRM webhook configuration, test fire
+- `/crm` — CRM webhook configuration, test fire (admin only)
+- `/admin/users` — invite teammates, change roles, reset passwords (admin only)
+- `/account` — change your own password
 
-## API surface (auth: `Authorization: Bearer <ADMIN_TOKEN>`)
+## API surface
 
-| Endpoint                          | Method | Purpose                          |
-| --------------------------------- | ------ | -------------------------------- |
-| `/api/services`                   | CRUD   | Service offerings                |
-| `/api/sources`                    | CRUD   | Lead sources                     |
-| `/api/discovery/run`              | POST   | Trigger a discovery run          |
-| `/api/discovery/suggest-queries`  | POST   | LLM-generated search queries     |
-| `/api/import/csv`                 | POST   | Upload a CSV target list         |
-| `/api/import/lead`                | POST   | Create a single lead manually    |
-| `/api/import/lists`               | GET    | List target lists                |
-| `/api/leads`                      | CRUD   | Leads (filter by score, status, list) |
-| `/api/enrichment/providers`       | GET    | What's configured                |
-| `/api/enrichment/run`             | POST   | Single waterfall (lead_id or ad-hoc subject) |
-| `/api/enrichment/batch`           | POST   | Bulk enrichment                  |
-| `/api/enrichment/runs`            | GET    | Audit trail                      |
-| `/api/research/run`               | POST   | Deep AI research on one lead     |
-| `/api/campaigns/draft`            | POST   | LLM-draft outreach               |
-| `/api/campaigns/{id}/send`        | POST   | Send via SMTP                    |
-| `/api/schedules`                  | CRUD   | APScheduler cron jobs            |
-| `/api/sheets`                     | CRUD   | Google Sheets sync configs       |
-| `/api/sheets/{id}/sync`           | POST   | Sync a config now                |
-| `/api/sheets/sync-all`            | POST   | Sync every active config         |
-| `/api/sheets/status`              | GET    | Service-account email + readiness|
-| `/api/crm`                        | CRUD   | CRM webhook configs              |
-| `/api/crm/{id}/test`              | POST   | Fire a test event                |
-| `/health`, `/api/stats`           | GET    | Operational visibility           |
+Auth: `Authorization: Bearer <token>` where `<token>` is either a user's JWT (from `POST /api/auth/login`) **or** the `ADMIN_TOKEN` superuser bypass.
+
+| Endpoint                          | Method | Min role | Purpose                          |
+| --------------------------------- | ------ | -------- | -------------------------------- |
+| `/api/auth/needs-setup`           | GET    | public   | Whether the first-admin setup is needed |
+| `/api/auth/setup`                 | POST   | public†  | Create first admin (only when no users exist) |
+| `/api/auth/login`                 | POST   | public   | Email + password → JWT           |
+| `/api/auth/me`                    | GET    | any      | Current user details             |
+| `/api/auth/change-password`       | POST   | any      | Change own password              |
+| `/api/users`                      | CRUD   | admin    | User management                  |
+| `/api/services`                   | GET    | viewer+  | List service offerings           |
+| `/api/services`                   | POST/PUT/DELETE | admin | Modify service offerings   |
+| `/api/sources`                    | GET    | viewer+  | List sources                     |
+| `/api/sources`                    | POST/PUT/DELETE | admin | Modify sources             |
+| `/api/discovery/run`              | POST   | member+  | Trigger a discovery run          |
+| `/api/discovery/suggest-queries`  | POST   | member+  | LLM-generated search queries     |
+| `/api/import/csv`                 | POST   | member+  | Upload a CSV target list         |
+| `/api/import/lead`                | POST   | member+  | Create a single lead manually    |
+| `/api/import/lists`               | GET    | viewer+  | List target lists                |
+| `/api/import/lists/{id}`          | DELETE | admin    | Delete a target list             |
+| `/api/leads`                      | GET    | viewer+  | List leads                       |
+| `/api/leads/{id}`                 | PATCH  | member+  | Update a lead                    |
+| `/api/leads/{id}`                 | DELETE | admin    | Delete a lead                    |
+| `/api/enrichment/*`               | *      | member+  | Waterfall enrichment             |
+| `/api/research/run`               | POST   | member+  | Deep AI research on one lead     |
+| `/api/campaigns`                  | GET    | viewer+  | List outreach messages           |
+| `/api/campaigns/draft`, `/{id}/send` | POST | member+ | Draft / send outreach            |
+| `/api/schedules`                  | GET    | viewer+  | View scheduled jobs              |
+| `/api/schedules`                  | POST/PUT/DELETE | admin | Manage scheduled jobs       |
+| `/api/sheets`                     | GET    | viewer+  | View sync configs                |
+| `/api/sheets`                     | POST/PUT/DELETE | admin | Manage sync configs         |
+| `/api/sheets/{id}/sync`, `/sync-all` | POST | member+ | Trigger a sync                  |
+| `/api/crm`                        | CRUD   | admin    | CRM webhook configs              |
+| `/api/crm/{id}/test`              | POST   | admin    | Fire a test event                |
+| `/api/stats`                      | GET    | viewer+  | KPIs                             |
+| `/health`                         | GET    | public   | Operational status               |
+
+† `/api/auth/setup` only works when zero users exist; otherwise it returns 400.
 
 Full Swagger at `/docs` once the backend is up.
 

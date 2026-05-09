@@ -4,14 +4,14 @@ from fastapi import APIRouter, BackgroundTasks, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import require_admin
+from app.auth import require_member
 from app.db import get_session
 from app.models import DiscoveryRun, ServiceOffering
 from app.schemas import DiscoveryRunOut, DiscoveryTrigger
 from app.services.extractor import generate_queries
 from app.workers.discovery_worker import run_discovery
 
-router = APIRouter(dependencies=[Depends(require_admin)])
+router = APIRouter(dependencies=[Depends(require_member)])
 
 
 @router.post("/run", status_code=202)

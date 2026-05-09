@@ -9,6 +9,63 @@ class _Base(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+# ---------- Auth / users ----------
+
+class UserOut(_Base):
+    id: UUID
+    email: str
+    name: Optional[str]
+    role: str
+    is_active: bool
+    last_login_at: Optional[datetime]
+    created_at: datetime
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class LoginResponse(BaseModel):
+    token: str
+    token_type: str = "bearer"
+    expires_in: int
+    user: UserOut
+
+
+class SetupRequest(BaseModel):
+    email: str
+    password: str
+    name: Optional[str] = None
+
+
+class UserCreate(BaseModel):
+    email: str
+    password: str
+    name: Optional[str] = None
+    role: str = "member"  # admin | member | viewer
+    is_active: bool = True
+
+
+class UserUpdate(BaseModel):
+    name: Optional[str] = None
+    role: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+class UserResetPassword(BaseModel):
+    new_password: str
+
+
+class PasswordChange(BaseModel):
+    old_password: str
+    new_password: str
+
+
+class NeedsSetupOut(BaseModel):
+    needs_setup: bool
+
+
 # ---------- Service offerings ----------
 
 class ServiceOfferingIn(BaseModel):

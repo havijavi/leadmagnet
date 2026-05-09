@@ -4,13 +4,13 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import require_admin
+from app.auth import require_any
 from app.config import settings
 from app.db import get_session
 from app.models import DiscoveryRun, Lead
 from app.schemas import StatsOut
 
-router = APIRouter(dependencies=[Depends(require_admin)])
+router = APIRouter(dependencies=[Depends(require_any)])
 
 
 @router.get("", response_model=StatsOut)

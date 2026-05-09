@@ -10,7 +10,7 @@ from app.models import CrmWebhook
 from app.schemas import CrmWebhookIn, CrmWebhookOut
 from app.services.crm_push import fire_event
 
-router = APIRouter(dependencies=[Depends(require_admin)])
+router = APIRouter(dependencies=[Depends(require_admin)])  # config is admin-only
 
 
 @router.get("", response_model=list[CrmWebhookOut])

@@ -5,16 +5,16 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import require_admin
+from app.auth import require_admin, require_any, require_member
 from app.db import get_session
 from app.models import Lead
 from app.schemas import LeadOut, LeadUpdate
 from app.services.crm_push import fire_event
 
-router = APIRouter(dependencies=[Depends(require_admin)])
+router = APIRouter()
 
 
-@router.get("", response_model=list[LeadOut])
+@router.get("", response_model=list[LeadOut], dependencies=[Depends(require_any)])
 async def list_leads(
     session: AsyncSession = Depends(get_session),
     status: Optional[str] = Query(None),
@@ -36,7 +36,7 @@ async def list_leads(
     return [LeadOut.model_validate(r) for r in rows]
 
 
-@router.get("/{lead_id}", response_model=LeadOut)
+@router.get("/{lead_id}", response_model=LeadOut, dependencies=[Depends(require_any)])
 async def get_lead(lead_id: UUID, session: AsyncSession = Depends(get_session)) -> LeadOut:
     obj = await session.get(Lead, lead_id)
     if not obj:
@@ -44,7 +44,7 @@ async def get_lead(lead_id: UUID, session: AsyncSession = Depends(get_session)) 
     return LeadOut.model_validate(obj)
 
 
-@router.patch("/{lead_id}", response_model=LeadOut)
+@router.patch("/{lead_id}", response_model=LeadOut, dependencies=[Depends(require_member)])
 async def update_lead(
     lead_id: UUID,
     payload: LeadUpdate,
@@ -68,7 +68,7 @@ async def update_lead(
     return LeadOut.model_validate(obj)
 
 
-@router.delete("/{lead_id}", status_code=204)
+@router.delete("/{lead_id}", status_code=204, dependencies=[Depends(require_admin)])
 async def delete_lead(lead_id: UUID, session: AsyncSession = Depends(get_session)) -> None:
     obj = await session.get(Lead, lead_id)
     if obj:

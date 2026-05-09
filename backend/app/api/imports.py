@@ -5,16 +5,16 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import require_admin
+from app.auth import require_admin, require_any, require_member
 from app.db import get_session
 from app.models import TargetList
 from app.schemas import LeadCreate, TargetListOut
 from app.workers.csv_import import import_csv
 
-router = APIRouter(dependencies=[Depends(require_admin)])
+router = APIRouter()
 
 
-@router.post("/csv")
+@router.post("/csv", dependencies=[Depends(require_member)])
 async def upload_csv(
     file: UploadFile = File(...),
     name: str = Form(...),
@@ -31,13 +31,13 @@ async def upload_csv(
     return result
 
 
-@router.get("/lists", response_model=list[TargetListOut])
+@router.get("/lists", response_model=list[TargetListOut], dependencies=[Depends(require_any)])
 async def list_target_lists(session: AsyncSession = Depends(get_session)) -> list[TargetListOut]:
     rows = await session.scalars(select(TargetList).order_by(TargetList.created_at.desc()))
     return [TargetListOut.model_validate(r) for r in rows]
 
 
-@router.delete("/lists/{list_id}", status_code=204)
+@router.delete("/lists/{list_id}", status_code=204, dependencies=[Depends(require_admin)])
 async def delete_target_list(list_id: UUID, session: AsyncSession = Depends(get_session)) -> None:
     obj = await session.get(TargetList, list_id)
     if obj:
@@ -45,7 +45,7 @@ async def delete_target_list(list_id: UUID, session: AsyncSession = Depends(get_
         await session.commit()
 
 
-@router.post("/lead", response_model=dict, status_code=201)
+@router.post("/lead", response_model=dict, status_code=201, dependencies=[Depends(require_member)])
 async def create_lead_manual(payload: LeadCreate, session: AsyncSession = Depends(get_session)) -> dict:
     """Single-lead manual create. The fingerprint enforces dedupe."""
     from app.models import Lead

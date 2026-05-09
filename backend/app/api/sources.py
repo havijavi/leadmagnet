@@ -4,27 +4,27 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import require_admin
+from app.auth import require_admin, require_any
 from app.db import get_session
 from app.models import LeadSource
 from app.schemas import LeadSourceIn, LeadSourceOut
 from app.sources import REGISTRY
 
-router = APIRouter(dependencies=[Depends(require_admin)])
+router = APIRouter()
 
 
-@router.get("/kinds")
+@router.get("/kinds", dependencies=[Depends(require_any)])
 async def list_kinds() -> dict:
     return {"kinds": sorted(REGISTRY.keys())}
 
 
-@router.get("", response_model=list[LeadSourceOut])
+@router.get("", response_model=list[LeadSourceOut], dependencies=[Depends(require_any)])
 async def list_sources(session: AsyncSession = Depends(get_session)) -> list[LeadSourceOut]:
     rows = await session.scalars(select(LeadSource).order_by(LeadSource.created_at.desc()))
     return [LeadSourceOut.model_validate(r) for r in rows]
 
 
-@router.post("", response_model=LeadSourceOut, status_code=201)
+@router.post("", response_model=LeadSourceOut, status_code=201, dependencies=[Depends(require_admin)])
 async def create_source(payload: LeadSourceIn, session: AsyncSession = Depends(get_session)) -> LeadSourceOut:
     if payload.kind not in REGISTRY:
         raise HTTPException(400, f"unknown kind {payload.kind!r}; valid: {sorted(REGISTRY)}")
@@ -35,7 +35,7 @@ async def create_source(payload: LeadSourceIn, session: AsyncSession = Depends(g
     return LeadSourceOut.model_validate(obj)
 
 
-@router.put("/{source_id}", response_model=LeadSourceOut)
+@router.put("/{source_id}", response_model=LeadSourceOut, dependencies=[Depends(require_admin)])
 async def update_source(
     source_id: UUID,
     payload: LeadSourceIn,
@@ -51,7 +51,7 @@ async def update_source(
     return LeadSourceOut.model_validate(obj)
 
 
-@router.delete("/{source_id}", status_code=204)
+@router.delete("/{source_id}", status_code=204, dependencies=[Depends(require_admin)])
 async def delete_source(source_id: UUID, session: AsyncSession = Depends(get_session)) -> None:
     obj = await session.get(LeadSource, source_id)
     if obj:
