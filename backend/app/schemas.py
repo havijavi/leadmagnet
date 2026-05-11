@@ -318,6 +318,65 @@ class CrmWebhookOut(_Base):
     created_at: datetime
 
 
+# ---------- LLM configurations ----------
+
+class LLMConfigIn(BaseModel):
+    name: str
+    provider_kind: str  # 'openai_compat' | 'anthropic'
+    base_url: str
+    model: str
+    api_key: str
+    extra: dict[str, Any] = Field(default_factory=dict)
+
+
+class LLMConfigUpdate(BaseModel):
+    name: Optional[str] = None
+    provider_kind: Optional[str] = None
+    base_url: Optional[str] = None
+    model: Optional[str] = None
+    api_key: Optional[str] = None
+    extra: Optional[dict[str, Any]] = None
+
+
+class LLMConfigOut(_Base):
+    id: UUID
+    name: str
+    provider_kind: str
+    base_url: str
+    model: str
+    api_key_preview: str  # masked
+    is_active: bool
+    extra: dict[str, Any]
+    created_at: datetime
+
+
+class LLMTestRequest(BaseModel):
+    # Either pass an existing config id…
+    config_id: Optional[UUID] = None
+    # …or supply an ad-hoc config to test before saving.
+    provider_kind: Optional[str] = None
+    base_url: Optional[str] = None
+    model: Optional[str] = None
+    api_key: Optional[str] = None
+
+
+class LLMTestResult(BaseModel):
+    ok: bool
+    elapsed_ms: int
+    sample_output: Optional[str] = None
+    error: Optional[str] = None
+
+
+class LLMActiveStatus(BaseModel):
+    configured: bool
+    source: str  # 'db' | 'env' | 'none'
+    provider_kind: Optional[str] = None
+    base_url: Optional[str] = None
+    model: Optional[str] = None
+    config_id: Optional[UUID] = None
+    config_name: Optional[str] = None
+
+
 # ---------- Google Sheets sync ----------
 
 class SheetsConfigIn(BaseModel):

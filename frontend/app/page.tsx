@@ -18,8 +18,12 @@ type Stats = {
 type Provider = { name: string; configured: boolean; fields: string[] };
 
 type Health = {
-  llm_provider: string;
-  llm_model: string;
+  llm_configured: boolean;
+  llm_source: "db" | "env" | "none";
+  llm_provider_kind?: string;
+  llm_base_url?: string;
+  llm_model?: string;
+  llm_config_name?: string;
   llm_mock_mode: boolean;
   smtp_configured: boolean;
   telegram_configured: boolean;
@@ -55,18 +59,23 @@ export default function Dashboard() {
       <section className="card">
         <h2 className="text-xl font-semibold mb-3">System</h2>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
-          <Pill label="LLM provider" value={health?.llm_provider ?? "—"} />
-          <Pill label="Model" value={health?.llm_model ?? "—"} />
           <Pill
-            label="LLM mode"
-            value={health?.llm_mock_mode ? "MOCK (no key)" : "LIVE"}
+            label="LLM"
+            value={health?.llm_mock_mode ? "MOCK (no key)" : (health?.llm_config_name ?? "LIVE")}
             tone={health?.llm_mock_mode ? "warn" : "good"}
           />
+          <Pill label="Model" value={health?.llm_model ?? "—"} />
+          <Pill label="LLM kind" value={health?.llm_provider_kind ?? "—"} />
           <Pill label="Scheduler" value={health?.scheduler_enabled ? "running" : "off"} tone={health?.scheduler_enabled ? "good" : "muted"} />
           <Pill label="SMTP" value={health?.smtp_configured ? "ready" : "off"} tone={health?.smtp_configured ? "good" : "muted"} />
           <Pill label="Telegram" value={health?.telegram_configured ? "ready" : "off"} tone={health?.telegram_configured ? "good" : "muted"} />
           <Pill label="Google Sheets" value={health?.google_sheets_configured ? "ready" : "off"} tone={health?.google_sheets_configured ? "good" : "muted"} />
         </div>
+        {health?.llm_mock_mode && (
+          <p className="text-xs text-muted mt-3">
+            No LLM configured — go to <Link href="/admin/llm" className="text-accent2">LLM providers</Link> to add OpenAI / Claude / DeepSeek / Qwen / Gemini / Ollama / etc.
+          </p>
+        )}
       </section>
 
       <section className="card">

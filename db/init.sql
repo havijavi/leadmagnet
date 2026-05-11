@@ -202,6 +202,25 @@ CREATE TABLE IF NOT EXISTS crm_webhooks (
 );
 
 -- ----------------------------------------------------------------------------
+-- LLM provider configurations.
+-- Multiple rows allowed; only one row is `is_active=TRUE` at a time and that's
+-- what the backend uses for all LLM calls. If no row is active, the backend
+-- falls back to the LLM_* env vars (legacy / bootstrap path).
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS llm_configs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name TEXT NOT NULL,                -- friendly label e.g. "DeepSeek prod"
+    provider_kind TEXT NOT NULL,       -- 'openai_compat' | 'anthropic'
+    base_url TEXT NOT NULL,
+    model TEXT NOT NULL,
+    api_key TEXT NOT NULL,             -- plaintext; column is sensitive
+    is_active BOOLEAN DEFAULT FALSE,
+    extra JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_llm_configs_active ON llm_configs(is_active);
+
+-- ----------------------------------------------------------------------------
 -- Google Sheets sync configurations.
 -- One row per spreadsheet/worksheet target. Triggered manually or by a
 -- scheduled_jobs row of kind='sheets_sync'.
