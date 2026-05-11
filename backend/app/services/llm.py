@@ -117,6 +117,23 @@ class LLMError(RuntimeError):
 
 
 @dataclass
+class ToolCall:
+    """Provider-agnostic representation of one model-requested tool invocation."""
+    id: str           # provider-supplied id, echoed back in the result
+    name: str
+    arguments: dict[str, Any]
+
+
+@dataclass
+class ChatTurn:
+    """One model turn's response in a chat (text + optional tool calls)."""
+    text: Optional[str]
+    tool_calls: list[ToolCall]
+    stop_reason: str                       # 'stop' | 'tool_use' | 'length' | 'error'
+    raw_assistant_message: Any             # original provider-shaped assistant message, for replay
+
+
+@dataclass
 class LLMClient:
     api_key: str
     base_url: str
@@ -142,6 +159,150 @@ class LLMClient:
         if self.provider_kind == "anthropic":
             return await self._call_anthropic(prompt, system, json_mode, temperature, max_tokens)
         return await self._call_openai(prompt, system, json_mode, temperature, max_tokens)
+
+    # ----------------------------------------------------------------------
+    # Tool-using chat — provider-agnostic interface
+    # ----------------------------------------------------------------------
+
+    async def chat_with_tools(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        system: str,
+        tools: list[dict[str, Any]],
+        temperature: float = 0.3,
+        max_tokens: int = 2048,
+    ) -> ChatTurn:
+        """One turn of a tool-capable chat.
+
+        `messages` is the provider-shaped history (user/assistant/tool roles).
+        `tools` is a list in OUR canonical shape:
+          {"name": str, "description": str, "parameters_schema": dict (JSON Schema)}
+        — we translate per provider.
+        """
+        if self.is_mock:
+            return ChatTurn(
+                text=(
+                    "(mock chat reply — add an LLM under Admin → LLM providers, then "
+                    "activate it. The chat will then be able to call tools and run real "
+                    "agentic work.)"
+                ),
+                tool_calls=[],
+                stop_reason="stop",
+                raw_assistant_message={"role": "assistant", "content": ""},
+            )
+        if self.provider_kind == "anthropic":
+            return await self._chat_anthropic(messages, system, tools, temperature, max_tokens)
+        return await self._chat_openai(messages, system, tools, temperature, max_tokens)
+
+    async def _chat_openai(self, messages, system, tools, temperature, max_tokens) -> ChatTurn:
+        full_messages = [{"role": "system", "content": system}] + messages
+        payload: dict[str, Any] = {
+            "model": self.model,
+            "messages": full_messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+        if tools:
+            payload["tools"] = [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": t["name"],
+                        "description": t["description"],
+                        "parameters": t["parameters_schema"],
+                    },
+                }
+                for t in tools
+            ]
+            payload["tool_choice"] = "auto"
+
+        async with httpx.AsyncClient(timeout=180.0) as client:
+            r = await client.post(
+                f"{self.base_url.rstrip('/')}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+            )
+            if r.status_code >= 400:
+                logger.error("LLM chat error %s: %s", r.status_code, r.text[:500])
+                raise LLMError(f"LLM chat call failed: HTTP {r.status_code} — {r.text[:200]}")
+            data = r.json()
+
+        try:
+            choice = data["choices"][0]
+            msg = choice["message"]
+        except (KeyError, IndexError) as e:
+            raise LLMError(f"Malformed OpenAI chat response: {data}") from e
+
+        tool_calls: list[ToolCall] = []
+        for tc in msg.get("tool_calls") or []:
+            try:
+                args = json.loads(tc["function"]["arguments"] or "{}")
+            except json.JSONDecodeError:
+                args = {}
+            tool_calls.append(
+                ToolCall(id=tc["id"], name=tc["function"]["name"], arguments=args)
+            )
+
+        stop_reason = "tool_use" if tool_calls else (choice.get("finish_reason") or "stop")
+        return ChatTurn(
+            text=msg.get("content"),
+            tool_calls=tool_calls,
+            stop_reason=stop_reason,
+            raw_assistant_message=msg,
+        )
+
+    async def _chat_anthropic(self, messages, system, tools, temperature, max_tokens) -> ChatTurn:
+        # Anthropic doesn't take a system message in the messages array — it's a top-level field.
+        payload: dict[str, Any] = {
+            "model": self.model,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "system": system,
+            "messages": messages,
+        }
+        if tools:
+            payload["tools"] = [
+                {
+                    "name": t["name"],
+                    "description": t["description"],
+                    "input_schema": t["parameters_schema"],
+                }
+                for t in tools
+            ]
+
+        async with httpx.AsyncClient(timeout=180.0) as client:
+            r = await client.post(
+                f"{self.base_url.rstrip('/')}/messages",
+                headers={
+                    "x-api-key": self.api_key,
+                    "anthropic-version": "2023-06-01",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+            )
+            if r.status_code >= 400:
+                logger.error("Anthropic chat error %s: %s", r.status_code, r.text[:500])
+                raise LLMError(f"Anthropic chat call failed: HTTP {r.status_code} — {r.text[:200]}")
+            data = r.json()
+
+        blocks = data.get("content") or []
+        text_parts = [b.get("text", "") for b in blocks if b.get("type") == "text"]
+        tool_calls = [
+            ToolCall(id=b["id"], name=b["name"], arguments=b.get("input") or {})
+            for b in blocks if b.get("type") == "tool_use"
+        ]
+        stop_reason = data.get("stop_reason", "stop")
+        return ChatTurn(
+            text="".join(text_parts) or None,
+            tool_calls=tool_calls,
+            stop_reason=stop_reason,
+            # Replay shape: an assistant message containing the same content blocks.
+            raw_assistant_message={"role": "assistant", "content": blocks},
+        )
 
     async def _call_openai(self, prompt, system, json_mode, temperature, max_tokens):
         payload: dict[str, Any] = {

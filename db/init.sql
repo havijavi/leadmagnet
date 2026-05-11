@@ -202,6 +202,40 @@ CREATE TABLE IF NOT EXISTS crm_webhooks (
 );
 
 -- ----------------------------------------------------------------------------
+-- Lead-chat projects — per-business chat threads with persistent memory
+-- the active LLM can read on every turn.
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS chat_projects (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name TEXT NOT NULL,
+    description TEXT,
+    system_prompt TEXT,
+    memory TEXT,                       -- free-form notes injected into every turn
+    is_pinned BOOLEAN DEFAULT FALSE,
+    created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_chat_projects_updated ON chat_projects(updated_at DESC);
+
+-- One row per message. Tool calls + tool results live in here too, so the
+-- full provider-replayable history is just `SELECT * FROM chat_messages
+-- WHERE project_id=? ORDER BY created_at`.
+CREATE TABLE IF NOT EXISTS chat_messages (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    project_id UUID NOT NULL REFERENCES chat_projects(id) ON DELETE CASCADE,
+    role TEXT NOT NULL,                -- 'user' | 'assistant' | 'tool'
+    content TEXT,
+    tool_calls JSONB,                  -- assistant turns can request tools
+    tool_call_id TEXT,                 -- tool results link back to the call id
+    tool_name TEXT,
+    error TEXT,                        -- populated when a tool call failed
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_project ON chat_messages(project_id, created_at);
+-- chat_projects.updated_at is maintained by SQLAlchemy onupdate, no trigger.
+
+-- ----------------------------------------------------------------------------
 -- LLM provider configurations.
 -- Multiple rows allowed; only one row is `is_active=TRUE` at a time and that's
 -- what the backend uses for all LLM calls. If no row is active, the backend

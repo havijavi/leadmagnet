@@ -318,6 +318,61 @@ class CrmWebhookOut(_Base):
     created_at: datetime
 
 
+# ---------- Lead Chat ----------
+
+class ChatProjectIn(BaseModel):
+    name: str
+    description: Optional[str] = None
+    system_prompt: Optional[str] = None
+    memory: Optional[str] = None
+    is_pinned: bool = False
+
+
+class ChatProjectUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    system_prompt: Optional[str] = None
+    memory: Optional[str] = None
+    is_pinned: Optional[bool] = None
+
+
+class ChatProjectOut(_Base):
+    id: UUID
+    name: str
+    description: Optional[str]
+    system_prompt: Optional[str]
+    memory: Optional[str]
+    is_pinned: bool
+    message_count: int = 0
+    last_message_at: Optional[datetime] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ChatMessageOut(_Base):
+    id: UUID
+    project_id: UUID
+    role: str  # 'user' | 'assistant' | 'tool'
+    content: Optional[str]
+    tool_calls: Optional[Any]
+    tool_call_id: Optional[str]
+    tool_name: Optional[str]
+    error: Optional[str]
+    created_at: datetime
+
+
+class ChatSendRequest(BaseModel):
+    content: str
+    max_tool_iterations: int = 8
+
+
+class ChatSendResponse(BaseModel):
+    project_id: UUID
+    new_messages: list[ChatMessageOut]
+    iterations: int
+    finished_reason: str  # 'final' | 'max_iterations' | 'error' | 'no_llm'
+
+
 # ---------- LLM configurations ----------
 
 class LLMConfigIn(BaseModel):

@@ -8,6 +8,7 @@ from sqlalchemy import select
 from app.api import (
     auth,
     campaigns,
+    chat,
     crm,
     discovery,
     enrichment,
@@ -83,7 +84,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="LeadMagnet API",
-    version="0.5.0",
+    version="0.6.0",
     description=(
         "Self-hosted Apify + Clay replacement. Per-user accounts with three roles "
         "(admin / member / viewer); LLM providers (OpenAI, Anthropic, DeepSeek, "
@@ -117,3 +118,4 @@ app.include_router(schedules.router, prefix="/api/schedules", tags=["schedules"]
 app.include_router(crm.router, prefix="/api/crm", tags=["crm"])
 app.include_router(sheets.router, prefix="/api/sheets", tags=["sheets"])
 app.include_router(llm_configs.router, prefix="/api/llm-configs", tags=["llm-configs"])
+app.include_router(chat.router, prefix="/api/chat", tags=["chat"])

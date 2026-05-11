@@ -14,7 +14,7 @@ async def health() -> dict:
     llm_status = await get_active_status()
     return {
         "status": "ok",
-        "version": "0.5.0",
+        "version": "0.6.0",
         # LLM status reflects whichever active config the DB has (or .env fallback).
         "llm_configured": llm_status["configured"],
         "llm_source": llm_status["source"],
