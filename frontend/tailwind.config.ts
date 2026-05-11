@@ -5,17 +5,18 @@ export default {
   theme: {
     extend: {
       colors: {
-        bg: "#0b0d12",
-        panel: "#11141b",
-        panel2: "#161a23",
-        border: "#1f2430",
-        text: "#e6e8ee",
-        muted: "#8a93a6",
-        accent: "#7c5cff",
-        accent2: "#22d3ee",
-        good: "#22c55e",
-        warn: "#f59e0b",
-        bad: "#ef4444",
+        // Light theme — warm off-white / cream
+        bg: "#fafaf7",      // page background, very subtle warm cream
+        panel: "#ffffff",   // card/panel surfaces, pure white
+        panel2: "#f4f3ef",  // slightly tinted nested surfaces (inputs, hover)
+        border: "#e5e3dc",  // soft cream borders
+        text: "#1f2937",    // dark slate text for body content
+        muted: "#6b7280",   // secondary text / labels
+        accent: "#6d4cff",  // brand purple (slightly deeper for contrast on white)
+        accent2: "#0891b2", // cyan for links / highlights
+        good: "#16a34a",
+        warn: "#d97706",
+        bad: "#dc2626",
       },
       fontFamily: {
         sans: ["ui-sans-serif", "system-ui", "Inter", "sans-serif"],
