@@ -16,6 +16,7 @@ from app.api import (
     imports,
     leads,
     llm_configs,
+    proxies,
     research,
     schedules,
     services,
@@ -84,7 +85,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="LeadMagnet API",
-    version="0.6.0",
+    version="0.7.0",
     description=(
         "Self-hosted Apify + Clay replacement. Per-user accounts with three roles "
         "(admin / member / viewer); LLM providers (OpenAI, Anthropic, DeepSeek, "
@@ -119,3 +120,4 @@ app.include_router(crm.router, prefix="/api/crm", tags=["crm"])
 app.include_router(sheets.router, prefix="/api/sheets", tags=["sheets"])
 app.include_router(llm_configs.router, prefix="/api/llm-configs", tags=["llm-configs"])
 app.include_router(chat.router, prefix="/api/chat", tags=["chat"])
+app.include_router(proxies.router, prefix="/api/proxies", tags=["proxies"])

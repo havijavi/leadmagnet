@@ -318,6 +318,57 @@ class CrmWebhookOut(_Base):
     created_at: datetime
 
 
+# ---------- Proxies ----------
+
+class ProxyIn(BaseModel):
+    label: str
+    url: str  # full proxy URL e.g. http://user:pass@host:port
+    is_active: bool = True
+
+
+class ProxyBulkIn(BaseModel):
+    urls: list[str]                       # one per line / list of URLs
+    label_prefix: str = "proxy"           # auto-label as f"{prefix}-{n}"
+
+
+class ProxyUpdate(BaseModel):
+    label: Optional[str] = None
+    url: Optional[str] = None             # blank = leave as-is
+    is_active: Optional[bool] = None
+
+
+class ProxyOut(_Base):
+    id: UUID
+    label: str
+    url_preview: str                      # password masked
+    is_active: bool
+    success_count: int
+    failure_count: int
+    last_used_at: Optional[datetime]
+    last_failure_at: Optional[datetime]
+    last_error: Optional[str]
+    created_at: datetime
+
+
+class ProxyTestRequest(BaseModel):
+    proxy_id: Optional[UUID] = None       # test an existing proxy
+    url: Optional[str] = None             # or test an ad-hoc URL
+
+
+class ProxyTestResult(BaseModel):
+    ok: bool
+    exit_ip: Optional[str] = None
+    elapsed_ms: int
+    error: Optional[str] = None
+
+
+class ProxyPoolStatus(BaseModel):
+    total: int
+    active: int
+    in_cooldown: int                      # active but recently failed
+    in_use_recently: int                  # used in the last 5 min
+
+
 # ---------- Lead Chat ----------
 
 class ChatProjectIn(BaseModel):

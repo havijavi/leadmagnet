@@ -202,6 +202,28 @@ CREATE TABLE IF NOT EXISTS crm_webhooks (
 );
 
 -- ----------------------------------------------------------------------------
+-- HTTP proxy pool. The crawler picks one per request, least-recently-used,
+-- skipping any that recently failed. Wired into both Crawl4AI's
+-- BrowserConfig (via Playwright) and the httpx fallback path.
+-- Paid rotating-proxy services typically give you a URL like
+--   http://username:password@us-pr.provider.com:10001
+-- one per region/port. Drop them all in here and the pool rotates.
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS proxies (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    label TEXT NOT NULL,                  -- friendly name e.g. "Oxylabs US #1"
+    url TEXT NOT NULL,                    -- http://user:pass@host:port (or socks5://)
+    is_active BOOLEAN DEFAULT TRUE,
+    last_used_at TIMESTAMPTZ,
+    last_failure_at TIMESTAMPTZ,
+    last_error TEXT,
+    success_count INTEGER DEFAULT 0,
+    failure_count INTEGER DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_proxies_active_lru ON proxies(is_active, last_used_at NULLS FIRST);
+
+-- ----------------------------------------------------------------------------
 -- Lead-chat projects — per-business chat threads with persistent memory
 -- the active LLM can read on every turn.
 -- ----------------------------------------------------------------------------

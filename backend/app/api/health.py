@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 
 from app.config import settings
-from app.services import google_sheets
+from app.services import google_sheets, proxy_pool
 from app.services.enrichment import available_providers
 from app.services.llm import get_active_status
 
@@ -12,9 +12,10 @@ router = APIRouter()
 async def health() -> dict:
     sheets_status = google_sheets.status()
     llm_status = await get_active_status()
+    pool = await proxy_pool.pool_status()
     return {
         "status": "ok",
-        "version": "0.6.0",
+        "version": "0.7.0",
         # LLM status reflects whichever active config the DB has (or .env fallback).
         "llm_configured": llm_status["configured"],
         "llm_source": llm_status["source"],
@@ -30,4 +31,5 @@ async def health() -> dict:
         "scheduler_enabled": settings.SCHEDULER_ENABLED,
         "google_sheets_configured": sheets_status["configured"],
         "google_sheets_service_account": sheets_status["service_account_email"],
+        "proxy_pool": pool,
     }
