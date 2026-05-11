@@ -208,6 +208,10 @@ class ChatMessage(Base):
     tool_call_id: Mapped[Optional[str]] = mapped_column(Text)
     tool_name: Mapped[Optional[str]] = mapped_column(Text)
     error: Mapped[Optional[str]] = mapped_column(Text)
+    # Provider-specific fields we must echo back on subsequent turns:
+    #   DeepSeek reasoner -> {"reasoning_content": "..."}
+    #   Anthropic thinking -> {"blocks": [...]} (preserves signed thinking blocks)
+    provider_extra: Mapped[Optional[dict]] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     project: Mapped["ChatProject"] = relationship(back_populates="messages")

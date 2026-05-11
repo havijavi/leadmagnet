@@ -35,10 +35,20 @@ logger = logging.getLogger(__name__)
 
 async def _auto_migrate() -> None:
     """Create any tables added in newer versions of the codebase. Safe to run
-    on every boot — Base.metadata.create_all skips tables that already exist
-    with the right name. Existing data is untouched."""
+    on every boot — Base.metadata.create_all skips tables that already exist.
+
+    For columns added to existing tables (which create_all does NOT handle),
+    we run idempotent ALTER TABLE statements below. PostgreSQL 9.6+ supports
+    IF NOT EXISTS on ADD COLUMN.
+    """
+    from sqlalchemy import text
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Idempotent column additions for upgrades from older versions.
+        await conn.execute(
+            text("ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS provider_extra JSONB")
+        )
 
 
 async def _auto_import_env_llm() -> None:

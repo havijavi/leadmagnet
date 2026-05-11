@@ -126,11 +126,22 @@ class ToolCall:
 
 @dataclass
 class ChatTurn:
-    """One model turn's response in a chat (text + optional tool calls)."""
+    """One model turn's response in a chat (text + optional tool calls).
+
+    `provider_extra` carries fields the provider expects to see echoed back on
+    subsequent calls — e.g. DeepSeek reasoner's `reasoning_content` or
+    Anthropic's signed thinking blocks. We persist it and re-attach it when
+    rebuilding history.
+    """
     text: Optional[str]
     tool_calls: list[ToolCall]
     stop_reason: str                       # 'stop' | 'tool_use' | 'length' | 'error'
     raw_assistant_message: Any             # original provider-shaped assistant message, for replay
+    provider_extra: dict[str, Any] = None  # type: ignore[assignment]
+
+    def __post_init__(self) -> None:
+        if self.provider_extra is None:
+            self.provider_extra = {}
 
 
 @dataclass
@@ -247,12 +258,19 @@ class LLMClient:
                 ToolCall(id=tc["id"], name=tc["function"]["name"], arguments=args)
             )
 
+        # Capture any provider-specific fields we need to echo back on the
+        # next call. The big one is DeepSeek reasoner's `reasoning_content`
+        # — without it, the next API call fails with HTTP 400.
+        _KNOWN = {"role", "content", "tool_calls", "refusal"}
+        extra = {k: v for k, v in msg.items() if k not in _KNOWN and v is not None}
+
         stop_reason = "tool_use" if tool_calls else (choice.get("finish_reason") or "stop")
         return ChatTurn(
             text=msg.get("content"),
             tool_calls=tool_calls,
             stop_reason=stop_reason,
             raw_assistant_message=msg,
+            provider_extra=extra,
         )
 
     async def _chat_anthropic(self, messages, system, tools, temperature, max_tokens) -> ChatTurn:
@@ -302,6 +320,9 @@ class LLMClient:
             stop_reason=stop_reason,
             # Replay shape: an assistant message containing the same content blocks.
             raw_assistant_message={"role": "assistant", "content": blocks},
+            # Store the full block list so we replay extended-thinking blocks
+            # (and their cryptographic signatures) unchanged on subsequent turns.
+            provider_extra={"blocks": blocks},
         )
 
     async def _call_openai(self, prompt, system, json_mode, temperature, max_tokens):

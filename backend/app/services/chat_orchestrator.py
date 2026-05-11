@@ -139,13 +139,15 @@ async def run_chat_turn(
             finished_reason = "error"
             break
 
-        # Persist the assistant message (text + tool_calls, if any).
+        # Persist the assistant message (text + tool_calls + any provider
+        # extras like reasoning_content / thinking blocks).
         async with session_scope() as session:
             assistant_msg = ChatMessage(
                 project_id=project_id,
                 role="assistant",
                 content=turn.text,
                 tool_calls=_serialize_tool_calls(turn.tool_calls) if turn.tool_calls else None,
+                provider_extra=turn.provider_extra or None,
             )
             session.add(assistant_msg)
             await session.flush()
@@ -239,6 +241,11 @@ def _to_openai_history(messages: list[ChatMessage]) -> list[dict[str, Any]]:
                     }
                     for tc in m.tool_calls
                 ]
+            # Echo back provider-specific fields like DeepSeek's
+            # reasoning_content. Without this, the API rejects the call.
+            for k, v in (m.provider_extra or {}).items():
+                if k not in entry and v is not None:
+                    entry[k] = v
             out.append(entry)
         elif m.role == "tool":
             out.append({
@@ -265,17 +272,23 @@ def _to_anthropic_history(messages: list[ChatMessage]) -> list[dict[str, Any]]:
             out.append({"role": "user", "content": m.content or ""})
         elif m.role == "assistant":
             _flush_tool_results()
-            blocks: list[dict[str, Any]] = []
-            if m.content:
-                blocks.append({"type": "text", "text": m.content})
-            for tc in (m.tool_calls or []):
-                blocks.append({
-                    "type": "tool_use",
-                    "id": tc["id"],
-                    "name": tc["name"],
-                    "input": tc.get("arguments") or {},
-                })
-            out.append({"role": "assistant", "content": blocks or [{"type": "text", "text": ""}]})
+            # Prefer the raw blocks captured at response time — they preserve
+            # things like signed thinking blocks that Anthropic insists on
+            # seeing unmodified on subsequent turns.
+            if m.provider_extra and m.provider_extra.get("blocks"):
+                out.append({"role": "assistant", "content": m.provider_extra["blocks"]})
+            else:
+                blocks: list[dict[str, Any]] = []
+                if m.content:
+                    blocks.append({"type": "text", "text": m.content})
+                for tc in (m.tool_calls or []):
+                    blocks.append({
+                        "type": "tool_use",
+                        "id": tc["id"],
+                        "name": tc["name"],
+                        "input": tc.get("arguments") or {},
+                    })
+                out.append({"role": "assistant", "content": blocks or [{"type": "text", "text": ""}]})
         elif m.role == "tool":
             pending_tool_results.append({
                 "type": "tool_result",

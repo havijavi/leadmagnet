@@ -252,6 +252,7 @@ CREATE TABLE IF NOT EXISTS chat_messages (
     tool_call_id TEXT,                 -- tool results link back to the call id
     tool_name TEXT,
     error TEXT,                        -- populated when a tool call failed
+    provider_extra JSONB,              -- reasoning_content / thinking blocks to echo back
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_chat_messages_project ON chat_messages(project_id, created_at);
