@@ -94,15 +94,17 @@ export default function ProxiesPage() {
         ))}
       </div>
 
-      <div className="card text-xs text-muted">
-        <strong>URL format:</strong>{" "}
-        <code className="text-text">http://username:password@host:port</code> for
-        authenticated HTTP/HTTPS proxies (the most common kind from paid services like
-        Oxylabs, SmartProxy, Webshare). For bare proxies use{" "}
-        <code className="text-text">http://host:port</code>. SOCKS5 is supported via{" "}
-        <code className="text-text">socks5://...</code> but requires httpx[socks] (already
-        installed). Test each proxy after adding — the test endpoint hits api.ipify.org
-        through it and shows you the exit IP.
+      <div className="card text-xs text-muted space-y-1">
+        <div><strong>Accepted formats (auto-detected):</strong></div>
+        <ul className="list-disc list-inside space-y-0.5 ml-1">
+          <li><code className="text-text">ip:port:user:pass</code> — provider export (Webshare, IPRoyal, ProxyEmpire)</li>
+          <li><code className="text-text">http://user:pass@host:port</code> — canonical URL</li>
+          <li><code className="text-text">socks5://user:pass@host:port</code> — SOCKS5 (Playwright supports it directly)</li>
+          <li><code className="text-text">host:port</code> — unauthenticated</li>
+        </ul>
+        <div className="pt-1">
+          Test each proxy after adding — the test endpoint hits <code className="text-text">api.ipify.org</code> through it and shows the exit IP, so you can verify the proxy actually changes your outbound IP.
+        </div>
       </div>
 
       {newOpen && (
@@ -406,8 +408,17 @@ function BulkModal({ onClose, onCreated }: { onClose: () => void; onCreated: () 
       >
         <h2 className="text-xl font-semibold">Bulk import proxies</h2>
         <p className="text-sm text-muted">
-          One proxy URL per line. Labels are auto-generated like{" "}
-          <code className="text-text">{prefix.trim() || "proxy"}-1</code>,{" "}
+          One proxy per line. <strong>Multiple formats supported</strong> — paste whatever your
+          provider gave you, we'll auto-convert:
+        </p>
+        <ul className="text-xs text-muted list-disc list-inside space-y-0.5">
+          <li><code className="text-text">ip:port:user:pass</code> &nbsp;(Webshare, IPRoyal, ProxyEmpire export)</li>
+          <li><code className="text-text">http://user:pass@host:port</code> &nbsp;(canonical URL)</li>
+          <li><code className="text-text">socks5://user:pass@host:port</code> &nbsp;(SOCKS5)</li>
+          <li><code className="text-text">host:port</code> &nbsp;(unauthenticated)</li>
+        </ul>
+        <p className="text-xs text-muted">
+          Labels auto-generated as <code className="text-text">{prefix.trim() || "proxy"}-1</code>,{" "}
           <code className="text-text">{prefix.trim() || "proxy"}-2</code>, etc.
         </p>
         <div>
@@ -420,7 +431,7 @@ function BulkModal({ onClose, onCreated }: { onClose: () => void; onCreated: () 
             className="input font-mono text-xs min-h-[200px]"
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder={`http://user:pass@us-pr.example.com:10001\nhttp://user:pass@us-pr.example.com:10002\n...`}
+            placeholder={`107.172.139.107:80:rmg2:aQ112233ss\n107.172.35.31:80:rmg2:aQ112233ss\nor: http://user:pass@host:port`}
           />
         </div>
         {err && <div className="text-bad text-sm">{err}</div>}

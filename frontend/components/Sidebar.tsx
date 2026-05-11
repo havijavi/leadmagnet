@@ -58,7 +58,7 @@ export default function Sidebar() {
     <aside className="w-60 shrink-0 border-r border-border bg-panel min-h-screen p-4 flex flex-col">
       <div className="mb-6 px-2">
         <div className="font-bold text-lg">⚡ LeadMagnet</div>
-        <div className="text-xs text-muted">v0.7.0</div>
+        <div className="text-xs text-muted">v0.7.1</div>
       </div>
 
       <nav className="flex flex-col gap-4 flex-1">

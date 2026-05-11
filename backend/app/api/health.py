@@ -15,7 +15,7 @@ async def health() -> dict:
     pool = await proxy_pool.pool_status()
     return {
         "status": "ok",
-        "version": "0.7.0",
+        "version": "0.7.1",
         # LLM status reflects whichever active config the DB has (or .env fallback).
         "llm_configured": llm_status["configured"],
         "llm_source": llm_status["source"],

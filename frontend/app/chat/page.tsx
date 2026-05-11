@@ -39,7 +39,6 @@ export default function ChatPage() {
   const [newOpen, setNewOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  // Auto-select the first project on load.
   useEffect(() => {
     if (!activeId && projects && projects.length > 0) {
       setActiveId(projects[0].id);
@@ -52,51 +51,44 @@ export default function ChatPage() {
   );
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] -m-8">
+    <div className="flex h-screen overflow-hidden bg-bg">
       {/* Project list */}
       <aside className="w-72 shrink-0 border-r border-border bg-panel2/40 flex flex-col">
-        <div className="p-4 border-b border-border">
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="font-semibold">Projects</h2>
-            <button className="btn-primary text-xs" onClick={() => setNewOpen(true)}>
+        <div className="px-4 py-4 border-b border-border bg-panel">
+          <div className="flex items-center justify-between mb-1">
+            <h2 className="font-semibold text-sm">Projects</h2>
+            <button
+              className="btn-primary text-xs py-1 px-2.5"
+              onClick={() => setNewOpen(true)}
+            >
               + New
             </button>
           </div>
-          <p className="text-xs text-muted">
-            One thread per business. Each project has its own memory, system prompt, and message history.
+          <p className="text-[11px] text-muted leading-snug">
+            One thread per business. Each has its own memory and history.
           </p>
         </div>
-        <div className="flex-1 overflow-auto p-2">
+        <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
           {projects?.length === 0 && (
-            <div className="text-sm text-muted p-3">
-              No projects yet. Click <strong>+ New</strong> to start.
+            <div className="text-xs text-muted px-3 py-6 text-center">
+              No projects yet.
+              <br />
+              Click <strong>+ New</strong> to start.
             </div>
           )}
           {projects?.map((p) => (
-            <button
+            <ProjectCard
               key={p.id}
-              className={`w-full text-left px-3 py-2 rounded-lg mb-1 transition ${
-                p.id === activeId
-                  ? "bg-panel border border-border"
-                  : "hover:bg-panel"
-              }`}
+              project={p}
+              active={p.id === activeId}
               onClick={() => setActiveId(p.id)}
-            >
-              <div className="flex items-center gap-2">
-                {p.is_pinned && <span className="text-warn text-xs">★</span>}
-                <span className="font-medium truncate flex-1">{p.name}</span>
-                <span className="text-xs text-muted">{p.message_count}</span>
-              </div>
-              {p.description && (
-                <div className="text-xs text-muted truncate mt-0.5">{p.description}</div>
-              )}
-            </button>
+            />
           ))}
         </div>
       </aside>
 
       {/* Chat panel */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {activeProject ? (
           <ChatPanel
             project={activeProject}
@@ -104,8 +96,10 @@ export default function ChatPage() {
             onChanged={() => mutateProjects()}
           />
         ) : (
-          <div className="flex-1 flex items-center justify-center text-muted">
-            {projects?.length === 0 ? "Create a project to start chatting." : "Pick a project on the left."}
+          <div className="flex-1 flex items-center justify-center text-muted text-sm">
+            {projects?.length === 0
+              ? "Create a project to start chatting."
+              : "Pick a project on the left."}
           </div>
         )}
       </div>
@@ -141,6 +135,46 @@ export default function ChatPage() {
 
 // ---------------------------------------------------------------------------
 
+function ProjectCard({
+  project,
+  active,
+  onClick,
+}: {
+  project: Project;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      className={`w-full text-left px-3 py-2.5 rounded-lg transition block ${
+        active
+          ? "bg-panel border border-border shadow-sm"
+          : "border border-transparent hover:bg-panel hover:border-border/60"
+      }`}
+      onClick={onClick}
+    >
+      <div className="flex items-center gap-1.5 mb-0.5">
+        {project.is_pinned && (
+          <span className="text-warn text-[11px] leading-none">★</span>
+        )}
+        <span className="font-medium truncate flex-1 text-sm">{project.name}</span>
+        {project.message_count > 0 && (
+          <span className="text-[10px] text-muted bg-panel2 px-1.5 py-0.5 rounded-full shrink-0">
+            {project.message_count}
+          </span>
+        )}
+      </div>
+      {project.description && (
+        <div className="text-[11px] text-muted leading-snug line-clamp-2">
+          {project.description}
+        </div>
+      )}
+    </button>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
 function ChatPanel({
   project,
   onOpenSettings,
@@ -159,13 +193,11 @@ function ChatPanel({
   const [sendErr, setSendErr] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Reset when switching projects.
   useEffect(() => {
     setDraft("");
     setSendErr(null);
   }, [project.id]);
 
-  // Auto-scroll to bottom when messages change.
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -177,7 +209,6 @@ function ChatPanel({
     if (!content || sending) return;
     setSending(true);
     setSendErr(null);
-    // Optimistic: drop our message into the visible list immediately.
     setDraft("");
     try {
       await api(`/api/chat/projects/${project.id}/messages`, {
@@ -188,7 +219,7 @@ function ChatPanel({
       onChanged();
     } catch (e: any) {
       setSendErr(e.message);
-      setDraft(content); // restore so the user doesn't lose it
+      setDraft(content);
     } finally {
       setSending(false);
     }
@@ -197,20 +228,20 @@ function ChatPanel({
   return (
     <>
       {/* Header */}
-      <div className="border-b border-border px-6 py-3 flex items-center justify-between bg-panel">
-        <div className="min-w-0">
+      <div className="border-b border-border px-6 py-3 flex items-center justify-between bg-panel shrink-0">
+        <div className="min-w-0 flex-1 mr-4">
           <div className="font-semibold truncate">{project.name}</div>
           {project.description && (
             <div className="text-xs text-muted truncate">{project.description}</div>
           )}
         </div>
-        <button className="btn-secondary text-xs" onClick={onOpenSettings}>
+        <button className="btn-secondary text-xs shrink-0" onClick={onOpenSettings}>
           ⚙ Settings
         </button>
       </div>
 
       {/* Messages */}
-      <div ref={scrollRef} className="flex-1 overflow-auto px-6 py-6 space-y-4">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-6 py-6 space-y-4 bg-bg">
         {(!messages || messages.length === 0) && (
           <EmptyHelp project={project} onUseExample={setDraft} />
         )}
@@ -218,16 +249,17 @@ function ChatPanel({
           <MessageBubble key={m.id} message={m} />
         ))}
         {sending && (
-          <div className="text-sm text-muted italic">
+          <div className="text-sm text-muted italic flex items-center gap-2">
+            <span className="animate-pulse">●</span>
             Thinking… (the LLM may be calling tools — discovery, crawls, etc.)
           </div>
         )}
       </div>
 
       {/* Composer */}
-      <div className="border-t border-border bg-panel p-4">
+      <div className="border-t border-border bg-panel p-4 shrink-0">
         {sendErr && <div className="text-bad text-sm mb-2">{sendErr}</div>}
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-end">
           <textarea
             className="input flex-1 min-h-[60px] max-h-[200px] resize-y"
             placeholder="Tell the agent what to do. E.g. 'Crawl bold.org/scholarships and save the top 20 active scholarships as leads.'"
@@ -242,14 +274,14 @@ function ChatPanel({
             disabled={sending}
           />
           <button
-            className="btn-primary self-end"
+            className="btn-primary"
             onClick={send}
             disabled={!draft.trim() || sending}
           >
             {sending ? "Sending…" : "Send"}
           </button>
         </div>
-        <div className="text-[10px] text-muted mt-1">⌘+Enter to send</div>
+        <div className="text-[10px] text-muted mt-1.5">⌘+Enter to send</div>
       </div>
     </>
   );
@@ -261,7 +293,7 @@ function MessageBubble({ message }: { message: Message }) {
   if (message.role === "user") {
     return (
       <div className="flex justify-end">
-        <div className="max-w-2xl bg-accent text-white rounded-2xl rounded-br-sm px-4 py-2 whitespace-pre-wrap">
+        <div className="max-w-2xl bg-accent text-white rounded-2xl rounded-br-sm px-4 py-2.5 whitespace-pre-wrap shadow-sm">
           {message.content}
         </div>
       </div>
@@ -275,9 +307,9 @@ function MessageBubble({ message }: { message: Message }) {
   // assistant
   return (
     <div className="flex justify-start">
-      <div className="max-w-2xl space-y-2">
+      <div className="max-w-2xl space-y-2 w-full">
         {message.content && (
-          <div className="bg-panel border border-border rounded-2xl rounded-bl-sm px-4 py-2 whitespace-pre-wrap">
+          <div className="bg-panel border border-border rounded-2xl rounded-bl-sm px-4 py-2.5 whitespace-pre-wrap shadow-sm">
             {message.content}
           </div>
         )}
@@ -289,7 +321,11 @@ function MessageBubble({ message }: { message: Message }) {
   );
 }
 
-function ToolCallChip({ call }: { call: { name: string; arguments: Record<string, any> } }) {
+function ToolCallChip({
+  call,
+}: {
+  call: { name: string; arguments: Record<string, any> };
+}) {
   const [open, setOpen] = useState(false);
   return (
     <div className="bg-panel2 border border-border rounded-lg text-xs">
@@ -297,7 +333,7 @@ function ToolCallChip({ call }: { call: { name: string; arguments: Record<string
         className="w-full text-left px-3 py-2 flex items-center justify-between"
         onClick={() => setOpen((v) => !v)}
       >
-        <span>
+        <span className="truncate">
           <span className="text-muted">tool call:</span>{" "}
           <span className="font-mono text-accent2">{call.name}</span>
           <span className="text-muted">(</span>
@@ -307,10 +343,10 @@ function ToolCallChip({ call }: { call: { name: string; arguments: Record<string
           </span>
           <span className="text-muted">)</span>
         </span>
-        <span className="text-muted">{open ? "▾" : "▸"}</span>
+        <span className="text-muted shrink-0 ml-2">{open ? "▾" : "▸"}</span>
       </button>
       {open && (
-        <pre className="text-xs px-3 pb-2 overflow-auto max-h-48 text-muted">
+        <pre className="text-xs px-3 pb-2 overflow-auto max-h-48 text-muted whitespace-pre-wrap">
           {JSON.stringify(call.arguments, null, 2)}
         </pre>
       )}
@@ -368,9 +404,15 @@ function prettyTry(s: string): string {
 
 // ---------------------------------------------------------------------------
 
-function EmptyHelp({ project, onUseExample }: { project: Project; onUseExample: (s: string) => void }) {
+function EmptyHelp({
+  project,
+  onUseExample,
+}: {
+  project: Project;
+  onUseExample: (s: string) => void;
+}) {
   const examples = [
-    "Crawl bold.org and find the 10 most relevant active scholarships. Save each one as a lead with the application URL as the website and the deadline in the project_summary.",
+    "Crawl bold.org/scholarships and find the 10 most relevant active scholarships. Save each one as a lead with the application URL as the website and the deadline in the project_summary.",
     "Search existing leads with fit_score >= 70 and tell me what they have in common.",
     "List my configured lead sources, then trigger a discovery run over the Reddit ones.",
     "Crawl https://example.com/team — extract every email address you see and save the most senior person as a lead.",
@@ -382,18 +424,28 @@ function EmptyHelp({ project, onUseExample }: { project: Project; onUseExample: 
         This chat has access to your active LLM, all your existing leads, and these tools:
       </p>
       <ul className="text-muted list-disc list-inside text-xs space-y-1">
-        <li><code className="text-text">crawl_url</code> — fetch any public webpage as Markdown</li>
-        <li><code className="text-text">save_lead</code> / <code className="text-text">search_leads</code> — work with your leads DB</li>
-        <li><code className="text-text">list_lead_sources</code> / <code className="text-text">trigger_discovery_run</code> — kick off background discovery</li>
-        <li><code className="text-text">list_services</code> — knows what you sell</li>
-        <li><code className="text-text">remember</code> — write durable notes to THIS project's memory</li>
+        <li>
+          <code className="text-text">crawl_url</code> — fetch any public webpage as Markdown (rotated through your proxy pool)
+        </li>
+        <li>
+          <code className="text-text">save_lead</code> / <code className="text-text">search_leads</code> — work with your leads DB
+        </li>
+        <li>
+          <code className="text-text">list_lead_sources</code> / <code className="text-text">trigger_discovery_run</code> — kick off background discovery
+        </li>
+        <li>
+          <code className="text-text">list_services</code> — knows what you sell
+        </li>
+        <li>
+          <code className="text-text">remember</code> — write durable notes to THIS project's memory
+        </li>
       </ul>
       <div className="space-y-2 pt-2">
         <div className="text-muted text-xs uppercase tracking-wider">Try one of these:</div>
         {examples.map((ex) => (
           <button
             key={ex}
-            className="w-full text-left px-3 py-2 bg-panel2 hover:bg-panel border border-border rounded-lg text-xs"
+            className="w-full text-left px-3 py-2 bg-panel hover:bg-panel2 border border-border rounded-lg text-xs leading-relaxed"
             onClick={() => onUseExample(ex)}
           >
             {ex}
@@ -403,7 +455,7 @@ function EmptyHelp({ project, onUseExample }: { project: Project; onUseExample: 
       <div className="text-xs text-muted pt-4 border-t border-border">
         <strong>About LinkedIn:</strong> LinkedIn actively blocks scrapers. A single public profile URL
         might work; anything at scale (e.g. "get me 500 LinkedIn leads") will fail. For real
-        LinkedIn volume, use Sales Navigator API, Apollo/Wiza/RocketReach (paid), or export from
+        LinkedIn volume, use Sales Navigator API, Apollo / Wiza / RocketReach (paid), or export from
         LinkedIn and use Import / Lists.
       </div>
     </div>

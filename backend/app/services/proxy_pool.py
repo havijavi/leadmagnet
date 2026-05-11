@@ -161,13 +161,32 @@ async def test_proxy_url(url: str) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 def normalize_url(raw: str) -> str:
-    """Allow bare `host:port` (default http://) and `user:pass@host:port`."""
+    """Normalize whatever proxy format the user pastes into the canonical
+    `scheme://user:pass@host:port` form httpx + Playwright both want.
+
+    Accepted inputs:
+      http://user:pass@host:port    — full URL, kept as-is
+      socks5://user:pass@host:port  — same
+      user:pass@host:port           — scheme defaulted to http://
+      host:port:user:pass           — common paid-proxy export format
+                                     (Webshare, IPRoyal, ProxyEmpire, etc.)
+      host:port                     — bare endpoint, no auth
+    """
     raw = (raw or "").strip()
     if not raw:
         return raw
-    if "://" not in raw:
-        raw = "http://" + raw
-    return raw
+    if "://" in raw:
+        return raw
+
+    # `host:port:user:pass` — 4 colon-separated parts.
+    if raw.count(":") == 3:
+        host, port, user, password = raw.split(":")
+        if host and port:
+            return f"http://{quote(user, safe='')}:{quote(password, safe='')}@{host}:{port}"
+
+    # Otherwise assume bare `host:port` (or `user:pass@host:port`) — let
+    # urlparse sort the rest out by prepending http://.
+    return "http://" + raw
 
 
 def mask_url(url: str) -> str:

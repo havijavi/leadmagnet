@@ -85,7 +85,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="LeadMagnet API",
-    version="0.7.0",
+    version="0.7.1",
     description=(
         "Self-hosted Apify + Clay replacement. Per-user accounts with three roles "
         "(admin / member / viewer); LLM providers (OpenAI, Anthropic, DeepSeek, "
