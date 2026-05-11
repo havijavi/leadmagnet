@@ -65,6 +65,17 @@ async def _auto_import_env_llm() -> None:
         logger.info("Auto-imported LLM_API_KEY from .env as an active llm_configs row")
 
 
+async def _auto_repair_proxies() -> None:
+    """One-shot fix for pre-v0.7.1 malformed proxy URLs (ip:port:user:pass
+    that got stored as http://ip:port:user:pass instead of being decoded).
+    No-op when there's nothing to fix."""
+    from app.services.proxy_pool import repair_all
+
+    result = await repair_all()
+    if result["fixed"]:
+        logger.info("Auto-repaired %s malformed proxy URLs", result["fixed"])
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
@@ -75,6 +86,10 @@ async def lifespan(app: FastAPI):
         await _auto_import_env_llm()
     except Exception as e:
         logger.exception("env-to-DB LLM import failed: %s", e)
+    try:
+        await _auto_repair_proxies()
+    except Exception as e:
+        logger.exception("proxy auto-repair failed: %s", e)
 
     await scheduler.start()
     try:

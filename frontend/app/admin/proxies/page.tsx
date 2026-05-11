@@ -58,6 +58,22 @@ export default function ProxiesPage() {
           </p>
         </div>
         <div className="flex gap-2">
+          <button
+            className="btn-secondary"
+            title="Re-parse stored URLs (fixes 'Invalid port' errors from pre-v0.7.1 imports)"
+            onClick={async () => {
+              try {
+                const r = await api<any>("/api/proxies/repair", { method: "POST" });
+                alert(`Fixed ${r.fixed} URL(s). ${r.untouched} already correct.`);
+                mutate();
+                mutateStatus();
+              } catch (e: any) {
+                alert(e.message);
+              }
+            }}
+          >
+            Re-parse URLs
+          </button>
           <button className="btn-secondary" onClick={() => setBulkOpen(true)}>
             Bulk import
           </button>

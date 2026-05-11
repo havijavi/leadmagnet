@@ -124,6 +124,16 @@ async def delete_proxy(proxy_id: UUID, session: AsyncSession = Depends(get_sessi
         await session.commit()
 
 
+@router.post("/repair")
+async def repair_proxies() -> dict:
+    """Re-parses every stored proxy URL, fixing rows that were imported under
+    the pre-v0.7.1 parser (where ip:port:user:pass got stored as
+    http://ip:port:user:pass instead of being decoded). Idempotent — safe to
+    run any time. Also clears cooldown on rows it fixes so they're
+    immediately re-testable."""
+    return {"ok": True, **await proxy_pool.repair_all()}
+
+
 @router.post("/{proxy_id}/reset", response_model=ProxyOut)
 async def reset_proxy(proxy_id: UUID, session: AsyncSession = Depends(get_session)) -> ProxyOut:
     """Clear failure counts + cooldown so the proxy is immediately re-eligible."""

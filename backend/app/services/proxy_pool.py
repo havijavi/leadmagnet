@@ -189,6 +189,57 @@ def normalize_url(raw: str) -> str:
     return "http://" + raw
 
 
+def repair_url(url: str) -> str:
+    """Fix URLs imported under the pre-v0.7.1 parser that didn't decode the
+    `ip:port:user:pass` format. Those were stored as
+        http://107.172.35.16:80:rmg2:aQ112233ss
+    which httpx can't parse (it interprets `80:rmg2:aQ112233ss` as the port).
+    Detected by: scheme present, no `@` after `://`, exactly three colons in
+    the netloc. Returns the URL unchanged when it doesn't match the pattern,
+    so it's safe to run on every row.
+    """
+    if not url or "://" not in url:
+        return normalize_url(url)
+    scheme, rest = url.split("://", 1)
+    if "@" in rest:
+        return url
+    # Strip any path/query suffix before counting colons.
+    path_idx = rest.find("/")
+    netloc = rest[:path_idx] if path_idx >= 0 else rest
+    suffix = rest[path_idx:] if path_idx >= 0 else ""
+    if netloc.count(":") != 3:
+        return url
+    host, port, user, password = netloc.split(":")
+    if not host or not port:
+        return url
+    return f"{scheme}://{quote(user, safe='')}:{quote(password, safe='')}@{host}:{port}{suffix}"
+
+
+async def repair_all() -> dict[str, int]:
+    """Walks every proxy row, applies repair_url, and resets the cooldown on
+    rows it touched. Called automatically on backend startup; also reachable
+    as POST /api/proxies/repair for manual triggering.
+    """
+    fixed = 0
+    untouched = 0
+    async with session_scope() as session:
+        rows = await session.scalars(select(Proxy))
+        for p in rows:
+            new = repair_url(p.url)
+            if new != p.url:
+                p.url = new
+                # The failures we logged were caused by the bad URL, not the
+                # proxy itself — clear the cooldown so it's immediately
+                # testable again.
+                p.last_failure_at = None
+                p.last_error = None
+                p.failure_count = 0
+                fixed += 1
+            else:
+                untouched += 1
+    return {"fixed": fixed, "untouched": untouched}
+
+
 def mask_url(url: str) -> str:
     """Returns the proxy URL with the password obfuscated. Safe to show in UI/API."""
     try:
